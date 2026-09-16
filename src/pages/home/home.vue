@@ -55,7 +55,7 @@
           <view class="today-plan" hover-class="plan-pressed" @tap="openTrainingPlan">
             <view class="plan-focus">
               <view class="plan-icon"><text>⌁</text></view>
-              <view class="plan-copy"><text class="plan-name">{{ todayPlan.name }}</text><text class="plan-meta">{{ todayPlanActionCount }} 个动作 · 预计 {{ todayPlanDuration }} 分钟</text></view>
+              <view class="plan-copy"><text class="plan-name">{{ backendPlan ? backendPlan.name : todayPlan.name }}</text><text class="plan-meta"> {{ todayPlanActionCount }} 个动作 ·预计 {{ backendPlan ? backendPlan.duration : todayPlanDuration }} 分钟</text></view>
               <text class="plan-arrow">›</text>
             </view>
             <view class="plan-status"><text>{{ todayCompleted ? '今日训练已完成' : '今天的安排已经准备好' }}</text><text>{{ todayCompleted ? '查看计划' : '开始训练' }} →</text></view>
@@ -85,9 +85,32 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onMounted,ref, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
+onMounted(() => {
+  loadTrainingPlan()
+})
 
+const backendPlan = ref(null)
+
+const loadTrainingPlan = () => {
+  uni.request({
+    url: 'https://hrfcyikwxjok.sealosbja.site/api/training-plans',
+    method: 'GET',
+
+    success: (res) => {
+      console.log('training plans:', res.data)
+
+      if (res.data?.ok && res.data?.data?.length > 0) {
+        backendPlan.value = res.data.data[0]
+      }
+    },
+
+    fail: (err) => {
+      console.error('请求训练计划失败：', err)
+    }
+  })
+}
 const THEME_STORAGE_KEY = 'fit_note_theme_index'
 const BODY_DATA_STORAGE_KEY = 'fit_note_body_profile'
 const themes = [
