@@ -95,7 +95,7 @@ const backendPlan = ref(null)
 
 const loadTrainingPlan = () => {
   uni.request({
-    url: 'https://hrfcyikwxjok.sealosbja.site/api/training-plans',
+    url: 'https://qfuksnohqkto.sealosbja.site',
     method: 'GET',
 
     success: (res) => {

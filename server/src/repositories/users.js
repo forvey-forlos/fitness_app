@@ -18,4 +18,13 @@ async function create(user) {
   )
 }
 
-module.exports = { findByNormalizedUsername, create }
+async function findForLogin(usernameNormalized) {
+  const [rows] = await pool.execute(
+    `SELECT id, username, password_hash, avatar_url, timezone, status, deleted_at
+     FROM users WHERE username_normalized = ? LIMIT 1`,
+    [usernameNormalized]
+  )
+  return rows[0] || null
+}
+
+module.exports = { findByNormalizedUsername, create, findForLogin }
