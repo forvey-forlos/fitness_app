@@ -21,7 +21,12 @@ function errorHandler(error, req, res, next) {
     console.error(`[${req.requestId}] ${req.method} ${req.path}: ${code}`)
   }
 
-  res.status(status).json({ code, message, data: null, requestId: req.requestId })
+  const body = { code, message, data: null, requestId: req.requestId }
+  if (error instanceof HttpError && Array.isArray(error.errors)) {
+    body.errors = error.errors
+  }
+
+  res.status(status).json(body)
 }
 
 module.exports = errorHandler

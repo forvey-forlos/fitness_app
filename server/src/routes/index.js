@@ -1,12 +1,15 @@
 const { Router } = require('express')
 const createHealthRoutes = require('./health')
 const createTrainingPlanRoutes = require('./trainingPlans')
+const createAuthRoutes = require('./auth')
 
 function createRoutes(services) {
   const router = Router()
   const healthRoutes = createHealthRoutes(services.healthService)
   const trainingPlanRoutes = createTrainingPlanRoutes(services.trainingPlanService)
+  const authRoutes = createAuthRoutes(services.authService)
 
+  router.use('/api/v1/auth', authRoutes)
   router.use('/api/v1', healthRoutes.v1, trainingPlanRoutes.v1)
 
   // Temporary aliases for the existing frontend. Remove after it adopts /api/v1.
