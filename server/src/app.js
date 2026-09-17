@@ -1,62 +1,22 @@
 const express = require('express')
 const cors = require('cors')
-require('dotenv').config()
 
-const pool = require('./config/db')
+const createRoutes = require('./routes')
+const requestId = require('./middlewares/requestId')
+const notFound = require('./middlewares/notFound')
+const errorHandler = require('./middlewares/errorHandler')
 
-const app = express()
+function createApp(services = {}) {
+  const app = express()
 
-app.use(cors())
-app.use(express.json())
+  app.use(requestId)
+  app.use(cors())
+  app.use(express.json())
+  app.use(createRoutes(services))
+  app.use(notFound)
+  app.use(errorHandler)
 
-app.get('/api/health', (req, res) => {
-  res.json({
-    ok: true,
-    message: 'backend is running'
-  })
-})
+  return app
+}
 
-app.get('/api/db-test', async (req, res) => {
-  try {
-    const [rows] = await pool.query('SELECT 1 AS result')
-
-    res.json({
-      ok: true,
-      message: 'database connected',
-      result: rows[0].result
-    })
-  } catch (error) {
-    console.error(error)
-
-    res.status(500).json({
-      ok: false,
-      message: 'database connection failed'
-    })
-  }
-})
-
-app.get('/api/training-plans', async (req, res) => {
-  try {
-    const [rows] = await pool.query(
-      'SELECT * FROM training_plans ORDER BY id DESC'
-    )
-
-    res.json({
-      ok: true,
-      data: rows
-    })
-  } catch (error) {
-    console.error(error)
-
-    res.status(500).json({
-      ok: false,
-      message: 'failed to load training plans'
-    })
-  }
-})
-
-const PORT = process.env.PORT || 8080
-
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server is running on 0.0.0.0:${PORT}`)
-})
+module.exports = createApp
