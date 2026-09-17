@@ -1,6 +1,14 @@
 /** 所有业务接口共用此入口；域名配置在项目根目录的 .env.local。 */
 export const BASE_URL = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '')
 export const ACCESS_TOKEN_KEY = 'fit_note_access_token'
+export const REFRESH_TOKEN_KEY = 'fit_note_refresh_token'
+export const USER_KEY = 'fit_note_auth_user'
+
+export function clearAuthStorage() {
+  uni.removeStorageSync(ACCESS_TOKEN_KEY)
+  uni.removeStorageSync(REFRESH_TOKEN_KEY)
+  uni.removeStorageSync(USER_KEY)
+}
 
 function joinUrl(path) {
   if (!BASE_URL) {
@@ -57,6 +65,10 @@ export function request({ url, method = 'GET', data, header = {}, auth = true, t
         if (ok && (body?.code === 0 || body?.code === '0')) {
           resolve(body.data)
           return
+        }
+        if (auth && token && response.statusCode === 401 &&
+            uni.getStorageSync(ACCESS_TOKEN_KEY) === token) {
+          clearAuthStorage()
         }
         const error = new Error(body?.message || (ok ? '接口响应格式不符合约定' : `请求失败（${response.statusCode}）`))
         error.statusCode = response.statusCode

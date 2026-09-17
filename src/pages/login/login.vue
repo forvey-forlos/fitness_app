@@ -49,7 +49,7 @@
       </view>
 
       <view class="option-row">
-        <view class="remember" @tap="remember=!remember"><view class="checkbox" :class="{ checked: remember }"><text v-if="remember">✓</text></view><text>记住账户和密码</text></view>
+        <view class="remember" @tap="remember=!remember"><view class="checkbox" :class="{ checked: remember }"><text v-if="remember">✓</text></view><text>记住账户</text></view>
         <view class="account-actions">
           <text class="forgot" @tap="forgotPassword">忘记密码？</text>
           <view class="action-divider" />
@@ -79,6 +79,7 @@
 <script setup>
 import { computed, reactive, ref, onMounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
+import { ACCESS_TOKEN_KEY, clearSession, getCurrentUser, login, saveSession } from '../../api/auth'
 
 const STORAGE_KEY = 'fit_note_remembered_login'
 const THEME_STORAGE_KEY = 'fit_note_theme_index'
@@ -188,11 +189,15 @@ async function submit() {
   if (!validateUsername() || !validatePassword() || errors.agreement) return
   loading.value = true
   try {
-    if (remember.value) uni.setStorageSync(STORAGE_KEY, { username: username.value, password: password.value })
+    const session = await login({ username: username.value, password: password.value })
+    saveSession(session)
+    if (remember.value) uni.setStorageSync(STORAGE_KEY, { username: username.value })
     else uni.removeStorageSync(STORAGE_KEY)
-    await new Promise(resolve => setTimeout(resolve, 700))
+    password.value = ''
     uni.showToast({ title: '登录成功', icon: 'success' })
     setTimeout(() => uni.reLaunch({ url: '/pages/home/home' }), 450)
+  } catch (error) {
+    uni.showToast({ title: error.message || '登录失败，请稍后重试', icon: 'none' })
   } finally { loading.value = false }
 }
 
@@ -205,14 +210,33 @@ function syncStoredTheme() {
   pendingTheme.value = themes[stored]
 }
 
+async function restoreSession() {
+  if (!uni.getStorageSync(ACCESS_TOKEN_KEY)) return
+  loading.value = true
+  try {
+    await getCurrentUser()
+    uni.reLaunch({ url: '/pages/home/home' })
+  } catch (error) {
+    if (error.statusCode === 401 || error.code === 'UNAUTHORIZED' ||
+        error.code === 'TOKEN_EXPIRED') {
+      clearSession()
+    } else {
+      uni.showToast({ title: error.message || '登录状态验证失败', icon: 'none' })
+    }
+  } finally {
+    loading.value = false
+  }
+}
+
 onShow(syncStoredTheme)
 onMounted(() => {
   const saved = uni.getStorageSync(STORAGE_KEY)
   if (saved && saved.username) {
     username.value = saved.username
-    password.value = saved.password || ''
     remember.value = true
+    if (saved.password) uni.setStorageSync(STORAGE_KEY, { username: saved.username })
   }
+  restoreSession()
 })
 </script>
 

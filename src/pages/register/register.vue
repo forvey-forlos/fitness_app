@@ -66,6 +66,7 @@
 <script setup>
 import { computed, reactive, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
+import { register } from '../../api/auth'
 
 const THEME_STORAGE_KEY='fit_note_theme_index'
 
@@ -94,7 +95,19 @@ function switchTheme(){if(themeChanging.value)return;const next=(themeIndex.valu
 function syncStoredTheme(){const stored=Number(uni.getStorageSync(THEME_STORAGE_KEY));if(!Number.isInteger(stored)||stored<0||stored>=themes.length||stored===themeIndex.value)return;themeChanging.value=false;themeIndex.value=stored;uiThemeIndex.value=stored;pendingTheme.value=themes[stored]}
 onShow(syncStoredTheme)
 function goBack(){uni.navigateBack({fail:()=>uni.redirectTo({url:'/pages/login/login'})})}
-async function submit(){if(!validateUsername()||!validatePassword()||!validateConfirm())return;loading.value=true;try{await new Promise(resolve=>setTimeout(resolve,700));uni.showToast({title:'账户创建成功',icon:'success'});setTimeout(goBack,900)}finally{setTimeout(()=>{loading.value=false},900)}}
+async function submit(){
+  if(!validateUsername()||!validatePassword()||!validateConfirm())return
+  loading.value=true
+  try{
+    await register({username:username.value,password:password.value})
+    password.value=''
+    confirmPassword.value=''
+    uni.showToast({title:'账户创建成功，请登录',icon:'success'})
+    setTimeout(()=>uni.reLaunch({url:'/pages/login/login'}),900)
+  }catch(error){
+    uni.showToast({title:error.message||'注册失败，请稍后重试',icon:'none'})
+  }finally{loading.value=false}
+}
 </script>
 
 <style scoped>

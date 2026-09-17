@@ -27,4 +27,13 @@ async function findForLogin(usernameNormalized) {
   return rows[0] || null
 }
 
-module.exports = { findByNormalizedUsername, create, findForLogin }
+async function findActiveById(id) {
+  const [rows] = await pool.execute(
+    `SELECT id, username, avatar_url, timezone
+     FROM users WHERE id = ? AND status = 'active' AND deleted_at IS NULL LIMIT 1`,
+    [id]
+  )
+  return rows[0] || null
+}
+
+module.exports = { findByNormalizedUsername, create, findForLogin, findActiveById }

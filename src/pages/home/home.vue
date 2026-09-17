@@ -85,31 +85,16 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted,ref, watch } from 'vue'
+import { computed, nextTick,ref, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-onMounted(() => {
-  loadTrainingPlan()
-})
+import { ACCESS_TOKEN_KEY, clearSession, getCurrentUser } from '../../api/auth'
+import { getTrainingPlans } from '../../api/training'
 
 const backendPlan = ref(null)
 
-const loadTrainingPlan = () => {
-  uni.request({
-    url: 'https://qfuksnohqkto.sealosbja.site',
-    method: 'GET',
-
-    success: (res) => {
-      console.log('training plans:', res.data)
-
-      if (res.data?.ok && res.data?.data?.length > 0) {
-        backendPlan.value = res.data.data[0]
-      }
-    },
-
-    fail: (err) => {
-      console.error('请求训练计划失败：', err)
-    }
-  })
+async function loadTrainingPlan() {
+  const plans = await getTrainingPlans()
+  backendPlan.value = Array.isArray(plans) && plans.length ? plans[0] : null
 }
 const THEME_STORAGE_KEY = 'fit_note_theme_index'
 const BODY_DATA_STORAGE_KEY = 'fit_note_body_profile'
@@ -191,7 +176,31 @@ function addAction(){uni.navigateTo({url:'/pages/action-management/action-manage
 function openPart(name){notice(`${name}动作列表将在后续开放`)}
 function openLibrary(){uni.navigateTo({url:'/pages/action-management/action-management'})}
 watch([trendSeries,themeIndex],()=>nextTick(drawWeightChart),{deep:true})
-onShow(()=>{syncTheme();loadBodyData();loadActionLibrary();loadTrainingData()})
+async function verifyHomeSession() {
+  if (!uni.getStorageSync(ACCESS_TOKEN_KEY)) {
+    clearSession()
+    uni.reLaunch({ url: '/pages/login/login' })
+    return
+  }
+  try {
+    await getCurrentUser()
+  } catch (error) {
+    if (error.statusCode === 401 || error.code === 'UNAUTHORIZED' ||
+        error.code === 'TOKEN_EXPIRED') {
+      clearSession()
+      uni.reLaunch({ url: '/pages/login/login' })
+    } else {
+      uni.showToast({ title: error.message || '登录状态验证失败', icon: 'none' })
+    }
+    return
+  }
+  try {
+    await loadTrainingPlan()
+  } catch (_) {
+    backendPlan.value = null
+  }
+}
+onShow(()=>{syncTheme();loadBodyData();loadActionLibrary();loadTrainingData();verifyHomeSession()})
 </script>
 
 <style scoped>
