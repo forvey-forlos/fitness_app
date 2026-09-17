@@ -28,7 +28,7 @@
         <text class="label">用户名</text>
         <view class="input-box" :class="{ focused: focusField === 'username', invalid: errors.username }">
           <text class="input-icon">○</text>
-          <input v-model="username" class="input" maxlength="15" placeholder="请输入中文或英文用户名" placeholder-class="placeholder" autocomplete="username" @focus="focusField='username'" @blur="validateUsername" @input="onUsernameInput" />
+          <input v-model="username" class="input" maxlength="-1" placeholder="请输入数字、英文或汉字用户名" placeholder-class="placeholder" autocomplete="username" @focus="focusField='username'" @blur="validateUsername" @input="onUsernameInput" />
           <text v-if="username" class="clear" @tap="username=''">×</text>
         </view>
         <text v-if="errors.username" class="error">{{ errors.username }}</text>
@@ -80,6 +80,7 @@
 import { computed, reactive, ref, onMounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { ACCESS_TOKEN_KEY, clearSession, getCurrentUser, login, saveSession } from '../../api/auth'
+import { getUsernameError, sanitizeUsername } from '../../utils/username'
 
 const STORAGE_KEY = 'fit_note_remembered_login'
 const THEME_STORAGE_KEY = 'fit_note_theme_index'
@@ -118,32 +119,20 @@ const themeStyle = computed(() => {
 })
 const transitionStyle = computed(() => ({ '--next-a': pendingTheme.value.bgA, '--next-b': pendingTheme.value.bgB }))
 
-const byteLength = (value) => {
-  try { return encodeURIComponent(value).replace(/%[0-9A-F]{2}|./g, 'x').length } catch (_) { return value.length }
-}
-const usernameBytes = computed(() => byteLength(username.value))
 const passwordTypes = computed(() => [/[0-9]/, /[A-Z]/, /[a-z]/, /[^A-Za-z0-9]/].filter(rule => rule.test(password.value)).length)
 const strengthText = computed(() => passwordTypes.value >= 4 ? '强' : passwordTypes.value >= 3 ? '良好' : '一般')
 
 function onUsernameInput(event) {
   const original = event.detail.value
-  const filtered = Array.from(original).filter(char => /[A-Za-z\u3400-\u9FFF]/.test(char))
-  let result = ''
-  for (const char of filtered) {
-    if (byteLength(result + char) > 15) break
-    result += char
-  }
+  const result = sanitizeUsername(original)
   username.value = result
-  errors.username = original !== result ? '仅支持中英文，且不超过 15 字节' : ''
+  errors.username = original !== result ? '仅支持数字、英文和汉字，最多 30 个字符' : ''
   return result
 }
 
 function validateUsername() {
   focusField.value = ''
-  if (!username.value) errors.username = '请输入用户名'
-  else if (!/^[A-Za-z\u3400-\u9FFF]+$/.test(username.value)) errors.username = '用户名仅支持中文和英文'
-  else if (usernameBytes.value > 15) errors.username = '用户名不能超过 15 字节'
-  else errors.username = ''
+  errors.username = getUsernameError(username.value)
   return !errors.username
 }
 

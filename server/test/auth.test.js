@@ -80,7 +80,7 @@ test('duplicate username is case-insensitive and returns a business error', asyn
 })
 
 test('invalid fields use the unified validation error and do not insert a user', async () => {
-  const { response, body } = await register({ username: '中文用户名超长', password: 'alllowercase' })
+  const { response, body } = await register({ username: '中'.repeat(31), password: 'alllowercase' })
 
   assert.equal(response.status, 400)
   assert.equal(body.code, 'VALIDATION_ERROR')
@@ -88,6 +88,24 @@ test('invalid fields use the unified validation error and do not insert a user',
   assert.equal(body.requestId, response.headers.get('x-request-id'))
   assert.deepEqual(body.errors.map((error) => error.field), ['username', 'password'])
   assert.equal(users.size, 1)
+})
+
+test('registration accepts digits, English, Han characters and exactly 30 characters', async () => {
+  for (const username of ['Fit2026健身', '中'.repeat(30), 'A'.repeat(29) + '9']) {
+    const { response, body } = await register({ username, password: 'Fit@2026ab' })
+    assert.equal(response.status, 201)
+    assert.equal(body.data.user.username, username)
+    assert.equal(users.has(username.replace(/[A-Z]/g, (letter) => letter.toLowerCase())), true)
+  }
+})
+
+test('registration rejects 31 characters and disallowed symbols', async () => {
+  for (const username of ['A'.repeat(31), '中'.repeat(31), 'Fit_2026', 'Fit 2026']) {
+    const { response, body } = await register({ username, password: 'Fit@2026ab' })
+    assert.equal(response.status, 400)
+    assert.equal(body.code, 'VALIDATION_ERROR')
+    assert.equal(body.errors[0].field, 'username')
+  }
 })
 
 test('a database uniqueness race also maps to the username conflict', async () => {

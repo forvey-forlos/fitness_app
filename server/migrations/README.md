@@ -1,7 +1,8 @@
 # Authentication schema migrations
 
-These two files target MySQL 8. Run them **once**, in numeric order, against the
-intended database. They create only `users` and `refresh_tokens`; no accounts,
+These three files target MySQL 8. Run them **once**, in numeric order, against the
+intended database. The first two create `users` and `refresh_tokens`; the third
+replaces the original username length constraint. No accounts,
 tokens, or API endpoints are created. MySQL DDL commits implicitly, so take a
 database backup and test on a non-production instance before applying to production.
 
@@ -11,9 +12,9 @@ each opaque, high-entropy refresh token in `token_hash`. Never store or log the
 plaintext password or token. Normalize usernames (lowercase ASCII letters,
 preserve Chinese characters) before writing `username_normalized`; the unique
 index performs case-insensitive lookup through that normalized value. The
-database checks the 15-byte username limit, while the full character and
-password rules from `docs/backend-api-spec.md` belong in future application
-validators.
+database checks the 1–30 character username limit after migration 003, while
+the full character and password rules from `docs/backend-api-spec.md` are
+enforced by application validators.
 
 For rotation, lock the old token row, reject expired/revoked/previously rotated
 tokens, set its `rotated_at`, and insert a new row with
@@ -30,6 +31,7 @@ the password rather than exposing it in shell history:
 ```bash
 mysql -h "$DB_HOST" -P "${DB_PORT:-3306}" -u "$DB_USER" -p "$DB_NAME" < server/migrations/001_create_users.sql
 mysql -h "$DB_HOST" -P "${DB_PORT:-3306}" -u "$DB_USER" -p "$DB_NAME" < server/migrations/002_create_refresh_tokens.sql
+mysql -h "$DB_HOST" -P "${DB_PORT:-3306}" -u "$DB_USER" -p "$DB_NAME" < server/migrations/003_expand_username_to_30_characters.sql
 ```
 
 If the DevBox has no `mysql` client, run each SQL file in order in the Sealos
@@ -53,5 +55,7 @@ WHERE TABLE_SCHEMA = DATABASE()
 
 Check that both tables exist, both `id` columns are `CHAR(36)` primary keys,
 `username_normalized` and `token_hash` are unique, and `refresh_tokens.user_id`
-references `users.id`. `TABLE_ROWS` is approximate for InnoDB; it is only a
+references `users.id`. Check that `users` has `chk_users_username_chars`
+instead of `chk_users_username_bytes`. Existing installations should run only
+the new 003 migration, not replay 001/002. `TABLE_ROWS` is approximate for InnoDB; it is only a
 non-sensitive sanity check, not an exact count.

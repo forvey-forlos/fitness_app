@@ -3,11 +3,27 @@ export const BASE_URL = String(import.meta.env.VITE_API_BASE_URL || '').replace(
 export const ACCESS_TOKEN_KEY = 'fit_note_access_token'
 export const REFRESH_TOKEN_KEY = 'fit_note_refresh_token'
 export const USER_KEY = 'fit_note_auth_user'
+let refreshPromise = null
+let redirectingToLogin = false
 
 export function clearAuthStorage() {
   uni.removeStorageSync(ACCESS_TOKEN_KEY)
   uni.removeStorageSync(REFRESH_TOKEN_KEY)
   uni.removeStorageSync(USER_KEY)
+}
+
+export function resetAuthRedirect() {
+  redirectingToLogin = false
+}
+
+function invalidateSession(expectedToken) {
+  const current = uni.getStorageSync(ACCESS_TOKEN_KEY)
+  if (current && current !== expectedToken) return
+  clearAuthStorage()
+  if (!redirectingToLogin) {
+    redirectingToLogin = true
+    uni.reLaunch({ url: '/pages/login/login' })
+  }
 }
 
 function joinUrl(path) {
@@ -35,12 +51,51 @@ export function withQuery(path, query = {}) {
  * 返回业务响应的 data，失败时抛出带 statusCode/code/requestId 的 Error。
  * 不在这里自动跳转或弹 Toast，避免影响各页面自己的交互流程。
  */
-export function request({ url, method = 'GET', data, header = {}, auth = true, timeout = 15000, idempotencyKey } = {}) {
+function isAuthenticationFailure(response) {
+  return response.statusCode === 401 &&
+    ['UNAUTHORIZED', 'TOKEN_EXPIRED'].includes(response.data?.code)
+}
+
+async function renewSession() {
+  if (refreshPromise) return refreshPromise
+
+  const oldRefreshToken = uni.getStorageSync(REFRESH_TOKEN_KEY)
+  if (!oldRefreshToken) throw new Error('登录已失效，请重新登录')
+
+  refreshPromise = (async () => {
+    const result = await sendRequest({
+      url: '/api/v1/auth/refresh', method: 'POST', auth: false,
+      data: { refreshToken: oldRefreshToken }
+    }, true)
+    if (!result?.accessToken || !result?.refreshToken) {
+      throw new Error('刷新令牌响应不完整')
+    }
+    if (uni.getStorageSync(REFRESH_TOKEN_KEY) !== oldRefreshToken) {
+      throw new Error('登录状态已变更')
+    }
+    try {
+      uni.setStorageSync(ACCESS_TOKEN_KEY, result.accessToken)
+      uni.setStorageSync(REFRESH_TOKEN_KEY, result.refreshToken)
+    } catch (error) {
+      clearAuthStorage()
+      throw error
+    }
+    return result
+  })()
+
+  try {
+    return await refreshPromise
+  } finally {
+    refreshPromise = null
+  }
+}
+
+async function sendRequest({ url, method = 'GET', data, header = {}, auth = true, timeout = 15000, idempotencyKey } = {}, retried = false) {
   let fullUrl
   try {
     fullUrl = joinUrl(url)
   } catch (error) {
-    return Promise.reject(error)
+    throw error
   }
 
   const token = auth ? uni.getStorageSync(ACCESS_TOKEN_KEY) : ''
@@ -52,31 +107,14 @@ export function request({ url, method = 'GET', data, header = {}, auth = true, t
     ...header,
   }
 
-  return new Promise((resolve, reject) => {
+  const response = await new Promise((resolve, reject) => {
     uni.request({
       url: fullUrl,
       method,
       data,
       header: headers,
       timeout,
-      success(response) {
-        const body = response.data
-        const ok = response.statusCode >= 200 && response.statusCode < 300
-        if (ok && (body?.code === 0 || body?.code === '0')) {
-          resolve(body.data)
-          return
-        }
-        if (auth && token && response.statusCode === 401 &&
-            uni.getStorageSync(ACCESS_TOKEN_KEY) === token) {
-          clearAuthStorage()
-        }
-        const error = new Error(body?.message || (ok ? '接口响应格式不符合约定' : `请求失败（${response.statusCode}）`))
-        error.statusCode = response.statusCode
-        error.code = body?.code || 'API_ERROR'
-        error.errors = body?.errors || []
-        error.requestId = body?.requestId || ''
-        reject(error)
-      },
+      success: resolve,
       fail(cause) {
         const error = new Error(cause?.errMsg || '网络连接失败，请稍后重试')
         error.code = 'NETWORK_ERROR'
@@ -84,4 +122,35 @@ export function request({ url, method = 'GET', data, header = {}, auth = true, t
       },
     })
   })
+
+  const body = response.data
+  const ok = response.statusCode >= 200 && response.statusCode < 300
+  if (ok && (body?.code === 0 || body?.code === '0')) return body.data
+
+  const error = new Error(body?.message || (ok ? '接口响应格式不符合约定' : `请求失败（${response.statusCode}）`))
+  error.statusCode = response.statusCode
+  error.code = body?.code || 'API_ERROR'
+  error.errors = body?.errors || []
+  error.requestId = body?.requestId || ''
+
+  if (auth && token && isAuthenticationFailure(response)) {
+    if (retried) {
+      invalidateSession(token)
+      throw error
+    }
+    try {
+      const currentToken = uni.getStorageSync(ACCESS_TOKEN_KEY)
+      if (currentToken === token) await renewSession()
+      else if (!currentToken) throw error
+      return await sendRequest({ url, method, data, header, auth, timeout, idempotencyKey }, true)
+    } catch (refreshError) {
+      invalidateSession(token)
+      throw refreshError
+    }
+  }
+  throw error
+}
+
+export function request(options = {}) {
+  return sendRequest(options)
 }

@@ -164,3 +164,10 @@ test('refresh-token repository inserts only a digest and null rotation state', a
   assert.match(executed.parameters[5], /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$/)
   assert.equal(executed.parameters.includes(password), false)
 })
+
+test('login accepts digit usernames and the 30-character boundary', async () => {
+  const username = 'A'.repeat(29) + '9'
+  const { response } = await login({ username, password })
+  assert.equal(response.status, 200)
+  assert.equal(lookedUpUsername, 'a'.repeat(29) + '9')
+})

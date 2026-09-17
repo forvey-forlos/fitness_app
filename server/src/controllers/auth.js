@@ -12,6 +12,18 @@ function createAuthController(service) {
       const authService = service || require('../services/auth').createAuthService()
       const result = await authService.login(req.validated)
       sendSuccess(res, result)
+    },
+
+    async refresh(req, res) {
+      const authService = service || require('../services/auth').createAuthService()
+      const result = await authService.refresh(req.validated)
+      sendSuccess(res, result)
+    },
+
+    async logout(req, res) {
+      const authService = service || require('../services/auth').createAuthService()
+      await authService.logout(req.validated)
+      sendSuccess(res, null)
     }
   }
 }

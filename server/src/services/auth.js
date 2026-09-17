@@ -86,6 +86,55 @@ function createAuthService(options = {}) {
         refreshToken,
         refreshTokenExpiresIn: tokenConfig.refreshTtl
       }
+    },
+
+    async refresh({ refreshToken, deviceId }) {
+      const tokenConfig = options.tokenConfig || require('../config/tokens').getTokenConfig()
+      const tokenUtils = options.tokenUtils || require('../utils/tokens')
+      const repository = options.refreshTokensRepository || require('../repositories/refreshTokens')
+      const oldHash = tokenUtils.hashRefreshToken(refreshToken)
+      const nextRefreshToken = tokenUtils.createRefreshToken()
+      const nextHash = tokenUtils.hashRefreshToken(nextRefreshToken)
+      let accessToken
+
+      await repository.withLockedToken(oldHash, async (transaction) => {
+        const old = transaction.token
+        if (!old) throw new HttpError(401, 'UNAUTHORIZED', 'Refresh Token 无效')
+        if (old.rotated_at) throw new HttpError(401, 'TOKEN_REUSED', 'Refresh Token 已被使用')
+        if (old.revoked_at) throw new HttpError(401, 'UNAUTHORIZED', 'Refresh Token 已撤销')
+        if (old.expired) throw new HttpError(401, 'TOKEN_EXPIRED', 'Refresh Token 已过期')
+        if (old.user_status !== 'active' || old.user_deleted_at !== null) {
+          throw new HttpError(401, 'UNAUTHORIZED', '用户已失效')
+        }
+        if (deviceId && old.device_id && deviceId !== old.device_id) {
+          throw new HttpError(401, 'UNAUTHORIZED', '设备不匹配')
+        }
+
+        accessToken = tokenUtils.createAccessToken(old.user_id, tokenConfig)
+        const rotated = await transaction.markRotated(old.id)
+        if (!rotated) throw new HttpError(401, 'TOKEN_REUSED', 'Refresh Token 已被使用')
+        await transaction.insertSuccessor({
+          id: createId(),
+          userId: old.user_id,
+          tokenHash: nextHash,
+          deviceId: deviceId || old.device_id,
+          platform: old.platform,
+          expiresAt: new Date(Date.now() + tokenConfig.refreshTtl * 1000)
+        }, old.id)
+      })
+
+      return {
+        accessToken,
+        accessTokenExpiresIn: tokenConfig.accessTtl,
+        refreshToken: nextRefreshToken,
+        refreshTokenExpiresIn: tokenConfig.refreshTtl
+      }
+    },
+
+    async logout({ refreshToken }) {
+      const tokenUtils = options.tokenUtils || require('../utils/tokens')
+      const repository = options.refreshTokensRepository || require('../repositories/refreshTokens')
+      await repository.revokeByHash(tokenUtils.hashRefreshToken(refreshToken))
     }
   }
 }

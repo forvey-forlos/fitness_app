@@ -26,10 +26,10 @@
         <text class="label">用户名</text>
         <view class="input-box" :class="{ focused: focusField==='username', invalid: errors.username }">
           <text class="input-icon">○</text>
-          <input v-model="username" class="input" maxlength="15" placeholder="请输入用户名" placeholder-class="placeholder" @focus="focusField='username'" @blur="validateUsername" @input="onUsernameInput" />
+          <input v-model="username" class="input" maxlength="-1" placeholder="请输入用户名" placeholder-class="placeholder" @focus="focusField='username'" @blur="validateUsername" @input="onUsernameInput" />
           <text v-if="username" class="clear" @tap="username=''">×</text>
         </view>
-        <text class="hint" :class="{ error: errors.username }">{{ errors.username || '支持中文或英文，最多 15 字节' }}</text>
+        <text class="hint" :class="{ error: errors.username }">{{ errors.username || '支持数字、英文和汉字，最多 30 个字符' }}</text>
       </view>
 
       <view class="form-item">
@@ -67,6 +67,7 @@
 import { computed, reactive, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { register } from '../../api/auth'
+import { getUsernameError, sanitizeUsername } from '../../utils/username'
 
 const THEME_STORAGE_KEY='fit_note_theme_index'
 
@@ -84,11 +85,10 @@ const themeIndex=ref(initialThemeIndex),uiThemeIndex=ref(initialThemeIndex),pend
 const frequencyBars=Array.from({length:30},(_,i)=>({id:i,style:{'--height':`${18+((i*19+i*i*7)%74)}px`,'--duration':`${.72+(i%7)*.11}s`,'--delay':`${-(i%11)*.09}s`}}))
 const themeStyle=computed(()=>{const bg=themes[themeIndex.value],ui=themes[uiThemeIndex.value];return{'--accent':ui.accent,'--accent-2':ui.accent2,'--bg-a':bg.bgA,'--bg-b':bg.bgB,'--glow-rgb':ui.glow}})
 const transitionStyle=computed(()=>({'--next-a':pendingTheme.value.bgA,'--next-b':pendingTheme.value.bgB}))
-const byteLength=value=>{try{return encodeURIComponent(value).replace(/%[0-9A-F]{2}|./g,'x').length}catch(_){return value.length}}
 const passwordTypes=computed(()=>[/[0-9]/,/[A-Z]/,/[a-z]/,/[^A-Za-z0-9]/].filter(rule=>rule.test(password.value)).length)
 
-function onUsernameInput(event){const original=event.detail.value;let result='';for(const char of Array.from(original).filter(c=>/[A-Za-z\u3400-\u9FFF]/.test(c))){if(byteLength(result+char)>15)break;result+=char}username.value=result;errors.username=original===result?'':'仅支持中英文，且不能超过 15 字节';return result}
-function validateUsername(){focusField.value='';if(!username.value)errors.username='请输入用户名';else if(!/^[A-Za-z\u3400-\u9FFF]+$/.test(username.value))errors.username='用户名仅支持中文和英文';else if(byteLength(username.value)>15)errors.username='用户名不能超过 15 字节';else errors.username='';return !errors.username}
+function onUsernameInput(event){const original=event.detail.value;const result=sanitizeUsername(original);username.value=result;errors.username=original===result?'':'仅支持数字、英文和汉字，最多 30 个字符';return result}
+function validateUsername(){focusField.value='';errors.username=getUsernameError(username.value);return !errors.username}
 function validatePassword(){focusField.value='';if(!password.value)errors.password='请输入密码';else if(!/^[\x21-\x7E]{8,16}$/.test(password.value))errors.password='密码须为 8–16 位数字、字母或特殊字符';else if(passwordTypes.value<2)errors.password='密码至少需要包含两种字符类型';else errors.password='';if(confirmPassword.value)validateConfirm();return !errors.password}
 function validateConfirm(){focusField.value='';if(!confirmPassword.value)errors.confirm='请再次输入密码';else if(confirmPassword.value!==password.value)errors.confirm='两次输入的密码不一致';else errors.confirm='';return !errors.confirm}
 function switchTheme(){if(themeChanging.value)return;const next=(themeIndex.value+1)%themes.length;pendingTheme.value=themes[next];uiThemeIndex.value=next;uni.setStorageSync(THEME_STORAGE_KEY,next);transitionKey.value++;themeChanging.value=true;setTimeout(()=>{themeIndex.value=next;themeChanging.value=false},820)}

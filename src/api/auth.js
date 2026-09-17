@@ -1,4 +1,4 @@
-import { request, ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY, clearAuthStorage } from './request'
+import { request, ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY, clearAuthStorage, resetAuthRedirect } from './request'
 import { getCurrentUser as fetchCurrentUser } from './user'
 
 export { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY }
@@ -21,8 +21,14 @@ export function refreshToken(refreshTokenValue, deviceId) {
   return request({ url: '/api/v1/auth/refresh', method: 'POST', auth: false, data: { refreshToken: refreshTokenValue, deviceId } })
 }
 
-export function logout({ refreshToken: refreshTokenValue, allDevices = false } = {}) {
-  return request({ url: '/api/v1/auth/logout', method: 'POST', data: { refreshToken: refreshTokenValue, allDevices } })
+export async function logout() {
+  const token = uni.getStorageSync(REFRESH_TOKEN_KEY)
+  try {
+    if (token) await request({ url: '/api/v1/auth/logout', method: 'POST', auth: false, data: { refreshToken: token } })
+  } finally {
+    clearSession()
+    uni.reLaunch({ url: '/pages/login/login' })
+  }
 }
 
 export function getCurrentAgreements(locale = 'zh-CN') {
@@ -45,6 +51,7 @@ export function saveSession({ accessToken, refreshToken: refreshTokenValue, user
     uni.setStorageSync(ACCESS_TOKEN_KEY, accessToken)
     uni.setStorageSync(REFRESH_TOKEN_KEY, refreshTokenValue)
     uni.setStorageSync(USER_KEY, user)
+    resetAuthRedirect()
   } catch (error) {
     clearAuthStorage()
     throw error

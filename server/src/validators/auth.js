@@ -1,6 +1,6 @@
 const { HttpError } = require('../utils/response')
 
-const USERNAME_PATTERN = /^[A-Za-z\u3400-\u9FFF]+$/u
+const USERNAME_PATTERN = /^[A-Za-z0-9\p{Script=Han}]+$/u
 const PASSWORD_PATTERN = /^[\x21-\x7E]{8,16}$/
 
 function normalizeUsername(username) {
@@ -9,7 +9,7 @@ function normalizeUsername(username) {
 
 function isValidUsername(username) {
   return typeof username === 'string' && USERNAME_PATTERN.test(username) &&
-    Buffer.byteLength(username, 'utf8') >= 1 && Buffer.byteLength(username, 'utf8') <= 15
+    Array.from(username).length >= 1 && Array.from(username).length <= 30
 }
 
 function isValidTimezone(timezone) {
@@ -29,7 +29,7 @@ function validateRegister(req, res, next) {
   const timezone = body.timezone === undefined ? 'Asia/Shanghai' : body.timezone
 
   if (!isValidUsername(username)) {
-    errors.push({ field: 'username', message: '用户名只能包含英文字母或中文，且不能超过 15 个 UTF-8 字节' })
+    errors.push({ field: 'username', message: '用户名只能包含数字、英文或汉字，且不能超过 30 个字符' })
   }
 
   if (typeof password !== 'string' || !PASSWORD_PATTERN.test(password)) {
@@ -83,4 +83,36 @@ function validateLogin(req, res, next) {
   next()
 }
 
-module.exports = { validateRegister, validateLogin, normalizeUsername }
+function validateRefreshTokenBody(req, next, { logout = false } = {}) {
+  const body = req.body || {}
+  const errors = []
+  const { refreshToken } = body
+  const deviceId = body.deviceId === undefined ? null : body.deviceId
+
+  if (typeof refreshToken !== 'string' || refreshToken.length < 1 || refreshToken.length > 256) {
+    errors.push({ field: 'refreshToken', message: 'Refresh Token 不合法' })
+  }
+  if (deviceId !== null &&
+      (typeof deviceId !== 'string' || !/^[\x21-\x7E]{1,128}$/.test(deviceId))) {
+    errors.push({ field: 'deviceId', message: '设备 ID 不合法' })
+  }
+  if (logout && body.allDevices !== undefined && body.allDevices !== false) {
+    errors.push({ field: 'allDevices', message: '暂不支持退出所有设备' })
+  }
+  if (errors.length > 0) {
+    return next(new HttpError(400, 'VALIDATION_ERROR', '请求参数不合法', errors))
+  }
+
+  req.validated = { refreshToken, deviceId }
+  next()
+}
+
+function validateRefresh(req, res, next) {
+  validateRefreshTokenBody(req, next)
+}
+
+function validateLogout(req, res, next) {
+  validateRefreshTokenBody(req, next, { logout: true })
+}
+
+module.exports = { validateRegister, validateLogin, validateRefresh, validateLogout, normalizeUsername }
