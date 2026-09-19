@@ -115,4 +115,4 @@ function validateLogout(req, res, next) {
   validateRefreshTokenBody(req, next, { logout: true })
 }
 
-module.exports = { validateRegister, validateLogin, validateRefresh, validateLogout, normalizeUsername }
+module.exports = { validateRegister, validateLogin, validateRefresh, validateLogout, normalizeUsername, isValidUsername, isValidTimezone }

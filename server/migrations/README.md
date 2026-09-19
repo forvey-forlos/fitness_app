@@ -1,6 +1,6 @@
 # Authentication schema migrations
 
-These three files target MySQL 8. Run them **once**, in numeric order, against the
+These eight files target MySQL 8. Run them **once**, in numeric order, against the
 intended database. The first two create `users` and `refresh_tokens`; the third
 replaces the original username length constraint. No accounts,
 tokens, or API endpoints are created. MySQL DDL commits implicitly, so take a
@@ -57,5 +57,95 @@ Check that both tables exist, both `id` columns are `CHAR(36)` primary keys,
 `username_normalized` and `token_hash` are unique, and `refresh_tokens.user_id`
 references `users.id`. Check that `users` has `chk_users_username_chars`
 instead of `chk_users_username_bytes`. Existing installations should run only
-the new 003 migration, not replay 001/002. `TABLE_ROWS` is approximate for InnoDB; it is only a
+the migrations not yet applied, without replaying prior files. `TABLE_ROWS` is approximate for InnoDB; it is only a
 non-sensitive sanity check, not an exact count.
+
+## Current body profile (004)
+
+Migration 004 creates body_profiles after 001-003. An existing installation
+that already ran 001-003 must run only 004, not replay earlier migrations.
+From the repository root in the Sealos DevBox, with database connection
+variables configured, run:
+
+    mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p "$DB_NAME" < server/migrations/004_create_body_profiles.sql
+
+The password is prompted; do not put it on the command line. If no MySQL
+client exists, run the SQL in the Sealos MySQL console after selecting the
+intended database. Verify with SHOW CREATE TABLE body_profiles and SHOW INDEX
+FROM body_profiles. The user_id primary key also indexes the user foreign
+key. Measurements are nullable DECIMAL(6,2), in cm except weight in kg.
+Version starts at 1 and is checked on each update. Body profile timestamps
+are UTC. The body profile API handles only current values in this phase;
+historical measurements and trends are not part of this migration.
+
+## Measurement history (005)
+
+Migration 005 creates body_measurements after 004. An existing installation
+that already ran 001-004 must run only 005:
+
+    mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p "$DB_NAME" < server/migrations/005_create_body_measurements.sql
+
+Verify using SHOW CREATE TABLE body_measurements and SHOW INDEX FROM
+body_measurements. Each row has a UUID primary key, a users foreign key,
+nullable DECIMAL(6,2) values, a UTC measurement timestamp, a version and a
+soft-delete timestamp. The user/time index supports history and trend reads.
+The optional per-user idempotency key prevents retries from creating an extra
+record, while different keys (or no key) permit separate records at the same
+timestamp. This migration does not rewrite body_profiles.
+
+## Exercise catalog and custom exercises (006)
+
+Migration 006 creates a shared exercises table. Apply it after 005, then run
+the repeatable seed from the repository root:
+
+    mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p "$DB_NAME" < server/migrations/006_create_exercises.sql
+    mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p "$DB_NAME" < server/seeds/001_system_exercises.sql
+
+The seed contains 32 system exercises across chest, back, shoulder, biceps,
+triceps, legs, glutes and core. It can be rerun without changing existing
+system exercises. Verify with SHOW CREATE TABLE exercises, SHOW INDEX FROM
+exercises, and a count of active system rows. The table combines system rows
+(null owner) with user-owned custom rows, as required by this phase's API.
+The generated owner_scope and active_key columns enforce uniqueness of active
+normalized names within an owner and category while allowing reuse after a
+soft delete. They are internal index helpers, not API fields.
+
+## Training plans (007)
+
+Migration 007 creates training_plans and training_plan_exercises after 006.
+Before running it, inspect whether an older training_plans table already
+exists in the target database. Do not overwrite or drop an existing table;
+an older incompatible schema needs a separately planned data migration.
+
+    mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p "$DB_NAME" < server/migrations/007_create_training_plans.sql
+
+Verify both tables with SHOW CREATE TABLE and SHOW INDEX. The unique active
+date key permits one non-deleted plan per user and date, while allowing a
+replacement after soft deletion. Plan and child rows use UUID strings.
+The application creates and replaces them in a transaction. Status allows
+draft and completed; this phase creates only draft plans. The former public
+test-list route is retained at /api/training-plans with its old success shape
+but now requires JWT and returns only the caller's plans.
+
+## Training completion and history (008)
+
+Run 008 only after 007 and inspect the existing schema first. It adds
+training_plans.completed_at and creates training_sessions and
+training_session_exercises. MySQL DDL commits implicitly, so back up the
+database and test on a non-production instance before applying it. If the
+ALTER succeeds but a later CREATE fails, inspect the three objects before
+retrying; do not blindly rerun the migration.
+
+    mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p "$DB_NAME" < server/migrations/008_create_training_sessions.sql
+
+Verify with SHOW CREATE TABLE training_sessions, SHOW CREATE TABLE
+training_session_exercises, SHOW COLUMNS FROM training_plans LIKE
+'completed_at', and SHOW INDEX FROM training_sessions. No table data or
+secret values need to be displayed. A unique source-plan key and a unique
+user/idempotency-key pair prevent duplicate completion history. A completion
+must include Idempotency-Key and the current plan version. The completion
+transaction locks the plan, copies snapshot fields, inserts the history
+and child rows, and updates the plan status/version/completed_at. History
+timestamps are UTC; list date filters and weekly aggregation use the user's
+saved timezone. The current completion API freezes planned exercise parameters;
+recording actual sets/reps/weight and editing history remain future work.

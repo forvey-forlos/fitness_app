@@ -5,7 +5,7 @@
       <view class="topbar">
         <view class="back" hover-class="pressed" @tap="goBack"><text>‹</text><text>返回首页</text></view>
         <view class="brand"><view class="brand-mark"/><text>FIT NOTE</text></view>
-        <view class="sync-badge"><view class="sync-dot"/><text>主题已同步</text></view>
+        <view class="sync-badge"><view class="sync-dot"/><text>{{ syncText }}</text></view>
       </view>
 
       <view class="hero">
@@ -57,8 +57,51 @@
             <view class="add-card composition-add bouncy" hover-class="card-pressed" @tap="addMetric('composition')"><view class="add-circle">＋</view><text>添加成分</text></view>
           </view>
         </view>
+
+        <view class="section circumference">
+          <view class="section-head">
+            <view class="section-title-wrap"><view class="section-icon ruler">≋</view><view><text class="section-kicker">HISTORY</text><text class="section-title">测量历史</text></view></view>
+            <text class="section-count">{{ measurements.length }} 条</text>
+          </view>
+          <text class="section-desc">正式记录已同步到账号，点击记录可编辑或删除</text>
+          <view class="primary-metric bouncy" hover-class="card-pressed" @tap="addMeasurement">
+            <view class="metric-visual height-visual"><text>＋</text></view>
+            <view class="primary-copy"><text class="primary-name">新增一次测量</text><text class="primary-note">选择一项身体指标并记录</text></view>
+            <text class="edit-arrow">›</text>
+          </view>
+          <view v-if="historyLoading" class="section-desc">正在加载测量历史…</view>
+          <view v-else-if="!measurements.length" class="section-desc">暂无测量记录</view>
+          <view v-else class="optional-grid">
+            <view v-for="item in measurements" :key="item.id" class="metric-card bouncy" hover-class="card-pressed" @tap="manageMeasurement(item)">
+              <view class="metric-top"><view class="mini-icon">◷</view><text class="remove">›</text></view>
+              <text class="metric-name">{{ formatMeasuredAt(item.measuredAt) }}</text>
+              <view><text class="metric-number">{{ measurementSummary(item) }}</text></view>
+            </view>
+          </view>
+        </view>
+
+        <view class="section composition">
+          <view class="section-head">
+            <view class="section-title-wrap"><view class="section-icon scale">⌁</view><view><text class="section-kicker">WEIGHT TREND</text><text class="section-title">体重趋势</text></view></view>
+            <text class="section-count" @tap="toggleTrend">{{ trendRange === 'week' ? '周' : '月' }} ↻</text>
+          </view>
+          <text class="section-desc">{{ trendRange === 'week' ? '最近 7 天每日记录' : '最近 6 个月月度记录' }}</text>
+          <view v-if="trendLoading" class="section-desc">正在加载趋势…</view>
+          <view v-else-if="!trend.points.length" class="section-desc">暂无体重趋势数据</view>
+          <view v-else class="optional-grid">
+            <view v-for="point in trend.points" :key="point.date" class="metric-card">
+              <view class="metric-top"><view class="mini-icon composition-icon">kg</view></view>
+              <text class="metric-name">{{ point.date }}</text>
+              <view><text class="metric-number">{{ point.value ?? '--' }}</text><text class="metric-unit">kg</text></view>
+            </view>
+          </view>
+          <view v-if="trend.current !== null" class="primary-metric">
+            <view class="metric-visual weight-visual"><text>◇</text></view>
+            <view class="primary-copy"><text class="primary-name">当前 {{ trend.current }} kg</text><text class="primary-note">{{ trend.change === null ? '只有一条记录，暂无变化值' : `变化 ${trend.change > 0 ? '+' : ''}${trend.change} kg` }}</text></view>
+          </view>
+        </view>
       </view>
-      <view class="footer-tip"><text>✓</text><text>数据仅保存在当前设备，后续可接入云端同步</text></view>
+      <view class="footer-tip" @tap="loadAll"><text>{{ loadError ? '!' : '✓' }}</text><text>{{ loadError || '身体档案、测量与趋势已同步到当前账号' }}</text></view>
     </view>
   </view>
 </template>
@@ -66,6 +109,10 @@
 <script setup>
 import { computed, reactive, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
+import {
+  createMeasurement, deleteMeasurement, getBodyProfile, getMeasurements,
+  getWeightTrend, updateBodyProfile, updateMeasurement
+} from '../../api/body'
 
 const THEME_STORAGE_KEY='fit_note_theme_index'
 const DATA_STORAGE_KEY='fit_note_body_profile'
@@ -74,12 +121,13 @@ const themes=[
   {accent:'#5f9fa5',accent2:'#8bbdaf',pale:'#edf6f5',pale2:'#f8fbfa',glow:'95,159,165'},
   {accent:'#bd8073',accent2:'#cda56f',pale:'#faf1ed',pale2:'#fdf9f5',glow:'189,128,115'}
 ]
+const profileKeys=['height','weight','waist','chest','hip','shoulderWidth','thigh','upperArm','calf']
+const measurementKeys=profileKeys.filter(key=>key!=='height')
 const savedTheme=Number(uni.getStorageSync(THEME_STORAGE_KEY))
 const themeIndex=ref(Number.isInteger(savedTheme)&&savedTheme>=0&&savedTheme<themes.length?savedTheme:0)
 const themeStyle=computed(()=>{const t=themes[themeIndex.value];return{'--accent':t.accent,'--accent-2':t.accent2,'--pale':t.pale,'--pale-2':t.pale2,'--glow-rgb':t.glow}})
-
 const circumferenceOptions=[
-  {key:'shoulder',name:'肩宽',unit:'cm',icon:'↔'},{key:'chest',name:'胸围',unit:'cm',icon:'○'},{key:'waist',name:'腰围',unit:'cm',icon:'⌁'},{key:'hip',name:'臀围',unit:'cm',icon:'∞'},
+  {key:'shoulderWidth',name:'肩宽',unit:'cm',icon:'↔'},{key:'chest',name:'胸围',unit:'cm',icon:'○'},{key:'waist',name:'腰围',unit:'cm',icon:'⌁'},{key:'hip',name:'臀围',unit:'cm',icon:'∞'},
   {key:'upperArm',name:'大臂围',unit:'cm',icon:'⌇'},{key:'thigh',name:'大腿围',unit:'cm',icon:'△'},{key:'calf',name:'小腿围',unit:'cm',icon:'◇'}
 ]
 const compositionOptions=[
@@ -87,23 +135,166 @@ const compositionOptions=[
   {key:'visceralFat',name:'内脏脂肪',unit:'级',icon:'V'},{key:'protein',name:'蛋白质',unit:'%',icon:'P'},{key:'bmr',name:'基础代谢',unit:'kcal',icon:'↯'},{key:'bodyAge',name:'身体年龄',unit:'岁',icon:'A'}
 ]
 const saved=uni.getStorageSync(DATA_STORAGE_KEY)||{}
-const heightMetric=reactive({key:'height',name:'身高',unit:'cm',value:saved.height||''})
-const weightMetric=reactive({key:'weight',name:'体重',unit:'kg',value:saved.weight||''})
-const circumferenceMetrics=ref(Array.isArray(saved.circumference)?saved.circumference:[])
+const legacyCircumference=Array.isArray(saved.circumference)?saved.circumference:[]
+const visibleCircumferenceKeys=Array.isArray(saved.visibleCircumferenceKeys)
+  ? saved.visibleCircumferenceKeys
+  : legacyCircumference.map(item=>item.key==='shoulder'?'shoulderWidth':item.key)
+const heightMetric=reactive({key:'height',name:'身高',unit:'cm',value:''})
+const weightMetric=reactive({key:'weight',name:'体重',unit:'kg',value:''})
+const circumferenceMetrics=ref(circumferenceOptions.filter(item=>visibleCircumferenceKeys.includes(item.key)).map(item=>({...item,value:''})))
 const compositionMetrics=ref(Array.isArray(saved.composition)?saved.composition:[])
-const weightHistory=ref(Array.isArray(saved.weightHistory)?saved.weightHistory:[])
+const profile=reactive(Object.fromEntries([...profileKeys.map(key=>[key,null]),['version',0]]))
+const measurements=ref([])
+const trend=ref({current:null,change:null,points:[]})
+const trendRange=ref('week')
+const loading=ref(false)
+const historyLoading=ref(false)
+const trendLoading=ref(false)
+const saving=ref(false)
+const loadError=ref('')
 const totalCount=computed(()=>2+circumferenceMetrics.value.length+compositionMetrics.value.length)
+const syncText=computed(()=>saving.value?'正在保存':loading.value?'正在同步':loadError.value?'同步失败':'云端已同步')
 
-function dateKey(date=new Date()){const year=date.getFullYear(),month=String(date.getMonth()+1).padStart(2,'0'),day=String(date.getDate()).padStart(2,'0');return year+'-'+month+'-'+day}
-function recordWeight(value){const today=dateKey();const existing=weightHistory.value.find(item=>item.date===today);if(existing){existing.value=Number(value);existing.timestamp=Date.now()}else{weightHistory.value.push({date:today,value:Number(value),timestamp:Date.now()})}weightHistory.value=weightHistory.value.sort((a,b)=>(a.timestamp||0)-(b.timestamp||0)).slice(-730)}
-function persist(){uni.setStorageSync(DATA_STORAGE_KEY,{height:heightMetric.value,weight:weightMetric.value,circumference:circumferenceMetrics.value,composition:compositionMetrics.value,weightHistory:weightHistory.value})}
+function persistUi(){
+  uni.setStorageSync(DATA_STORAGE_KEY,{
+    visibleCircumferenceKeys:circumferenceMetrics.value.map(item=>item.key),
+    composition:compositionMetrics.value
+  })
+}
+function applyProfile(data){
+  for(const key of profileKeys)profile[key]=data?.[key]??null
+  profile.version=Number(data?.version||0)
+  heightMetric.value=profile.height??''
+  weightMetric.value=profile.weight??''
+  circumferenceMetrics.value.forEach(metric=>{metric.value=profile[metric.key]??''})
+}
+function profilePayload(changes={}){
+  return Object.fromEntries([
+    ...profileKeys.map(key=>[key,Object.hasOwn(changes,key)?changes[key]:profile[key]]),
+    ['version',profile.version]
+  ])
+}
+function showError(error,fallback='请求失败'){
+  loadError.value=error?.message||fallback
+  uni.showToast({title:loadError.value,icon:'none'})
+}
+async function loadProfile(){applyProfile(await getBodyProfile())}
+async function loadHistory(){
+  historyLoading.value=true
+  try{const result=await getMeasurements({page:1,pageSize:50});measurements.value=Array.isArray(result?.items)?result.items:[]}
+  finally{historyLoading.value=false}
+}
+async function loadTrend(){
+  trendLoading.value=true
+  try{const result=await getWeightTrend(trendRange.value);trend.value={current:result?.current??null,change:result?.change??null,points:Array.isArray(result?.points)?result.points:[]}}
+  finally{trendLoading.value=false}
+}
+async function loadAll(){
+  if(loading.value)return
+  loading.value=true;loadError.value=''
+  try{await Promise.all([loadProfile(),loadHistory(),loadTrend()])}
+  catch(error){showError(error,'身体数据加载失败')}
+  finally{loading.value=false}
+}
+async function saveProfile(changes){
+  if(saving.value)return false
+  saving.value=true
+  try{
+    applyProfile(await updateBodyProfile(profilePayload(changes)))
+    uni.showToast({title:'保存成功',icon:'success'})
+    return true
+  }catch(error){showError(error,'身体档案保存失败');await loadProfile().catch(()=>{});return false}
+  finally{saving.value=false}
+}
+function numericInput(metric,callback){
+  uni.showModal({title:`记录${metric.name}`,editable:true,placeholderText:`请输入${metric.name}（${metric.unit}）`,content:metric.value!==''&&metric.value!==null?String(metric.value):'',success:async result=>{
+    if(!result.confirm)return
+    const raw=String(result.content||'').trim(),value=Number(raw)
+    if(!/^\d+(\.\d{1,2})?$/.test(raw)||!Number.isFinite(value)||value<=0){uni.showToast({title:'请输入正确的正数，最多两位小数',icon:'none'});return}
+    await callback(value)
+  }})
+}
+function editMetric(type,metric){
+  if(type==='composition'){
+    numericInput(metric,async value=>{metric.value=value;persistUi();uni.showToast({title:'草稿已保存',icon:'success'})})
+    return
+  }
+  numericInput(metric,value=>saveProfile({[metric.key]:value}))
+}
+function optionsFor(type){
+  const source=type==='circumference'?circumferenceOptions:compositionOptions
+  const active=type==='circumference'?circumferenceMetrics.value:compositionMetrics.value
+  return source.filter(item=>!active.some(metric=>metric.key===item.key))
+}
+function addMetric(type){
+  const available=optionsFor(type)
+  if(!available.length){uni.showToast({title:'所有项目都已添加',icon:'none'});return}
+  uni.showActionSheet({itemList:available.map(item=>item.name),success:({tapIndex})=>{
+    const item={...available[tapIndex],value:type==='circumference'?(profile[available[tapIndex].key]??''):''}
+    ;(type==='circumference'?circumferenceMetrics.value:compositionMetrics.value).push(item)
+    persistUi();setTimeout(()=>editMetric(type,item),180)
+  }})
+}
+function removeMetric(type,metric){
+  uni.showModal({title:`移除${metric.name}？`,content:type==='composition'?'仅移除当前设备上的草稿。':'同时清空云端身体档案中的该项数据。',success:async result=>{
+    if(!result.confirm)return
+    if(type==='circumference'&&!await saveProfile({[metric.key]:null}))return
+    const list=type==='circumference'?circumferenceMetrics:compositionMetrics
+    list.value=list.value.filter(item=>item.key!==metric.key);persistUi()
+  }})
+}
+function metricMeta(key){return [weightMetric,...circumferenceOptions].find(item=>item.key===key)}
+function chooseMetric(keys,callback){
+  const available=keys.map(metricMeta).filter(Boolean)
+  uni.showActionSheet({itemList:available.map(item=>item.name),success:({tapIndex})=>callback(available[tapIndex])})
+}
+function addMeasurement(){
+  chooseMetric(measurementKeys,metric=>numericInput(metric,async value=>{
+    try{
+      const key='body-'+Date.now()+'-'+Math.random().toString(36).slice(2,10)
+      await createMeasurement({measuredAt:new Date().toISOString(),[metric.key]:value},key)
+      await Promise.all([loadHistory(),loadTrend()])
+      uni.showToast({title:'测量已记录',icon:'success'})
+    }catch(error){showError(error,'测量记录创建失败')}
+  }))
+}
+function manageMeasurement(item){
+  uni.showActionSheet({itemList:['编辑记录','删除记录'],success:({tapIndex})=>{
+    if(tapIndex===0)editMeasurement(item)
+    else confirmDeleteMeasurement(item)
+  }})
+}
+function editMeasurement(item){
+  const keys=measurementKeys.filter(key=>item[key]!==null&&item[key]!==undefined)
+  chooseMetric(keys.length?keys:measurementKeys,metric=>numericInput({...metric,value:item[metric.key]??''},async value=>{
+    try{
+      await updateMeasurement(item.id,{version:item.version,[metric.key]:value})
+      await Promise.all([loadHistory(),loadTrend()])
+      uni.showToast({title:'记录已更新',icon:'success'})
+    }catch(error){showError(error,'测量记录更新失败')}
+  }))
+}
+function confirmDeleteMeasurement(item){
+  uni.showModal({title:'删除这条测量记录？',content:formatMeasuredAt(item.measuredAt),success:async result=>{
+    if(!result.confirm)return
+    try{await deleteMeasurement(item.id);await Promise.all([loadHistory(),loadTrend()]);uni.showToast({title:'已删除',icon:'success'})}
+    catch(error){showError(error,'测量记录删除失败')}
+  }})
+}
+function formatMeasuredAt(value){
+  if(!value)return'未知时间'
+  try{return new Intl.DateTimeFormat('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(value))}
+  catch(_){return String(value).slice(0,16).replace('T',' ')}
+}
+function measurementSummary(item){
+  const values=measurementKeys.filter(key=>item[key]!==null&&item[key]!==undefined).slice(0,2)
+    .map(key=>`${metricMeta(key)?.name||key} ${item[key]}`)
+  return values.join(' · ')||'空记录'
+}
+async function toggleTrend(){trendRange.value=trendRange.value==='week'?'month':'week';try{await loadTrend()}catch(error){showError(error,'趋势加载失败')}}
 function goBack(){uni.navigateBack({fail:()=>uni.reLaunch({url:'/pages/home/home'})})}
 function syncTheme(){const value=Number(uni.getStorageSync(THEME_STORAGE_KEY));if(Number.isInteger(value)&&value>=0&&value<themes.length)themeIndex.value=value}
-function optionsFor(type){const source=type==='circumference'?circumferenceOptions:compositionOptions;const active=type==='circumference'?circumferenceMetrics.value:compositionMetrics.value;return source.filter(item=>!active.some(metric=>metric.key===item.key))}
-function addMetric(type){const available=optionsFor(type);if(!available.length){uni.showToast({title:'所有项目都已添加',icon:'none'});return}uni.showActionSheet({itemList:available.map(item=>item.name),success:({tapIndex})=>{const item={...available[tapIndex],value:''};(type==='circumference'?circumferenceMetrics.value:compositionMetrics.value).push(item);persist();setTimeout(()=>editMetric(type,item),180)}})}
-function editMetric(type,metric){uni.showModal({title:`记录${metric.name}`,editable:true,placeholderText:`请输入${metric.name}（${metric.unit}）`,content:metric.value?String(metric.value):'',success:result=>{if(!result.confirm)return;const value=String(result.content||'').trim();if(!/^\d+(\.\d{1,2})?$/.test(value)||Number(value)<=0){uni.showToast({title:'请输入正确的正数，最多两位小数',icon:'none'});return}metric.value=value;if(metric.key==='weight')recordWeight(value);persist();uni.showToast({title:'记录成功',icon:'success'})}})}
-function removeMetric(type,metric){uni.showModal({title:`移除${metric.name}？`,content:'已填写的数据也会同时移除。',success:result=>{if(!result.confirm)return;const list=type==='circumference'?circumferenceMetrics:compositionMetrics;list.value=list.value.filter(item=>item.key!==metric.key);persist()}})}
-onShow(syncTheme)
+onShow(()=>{syncTheme();loadAll()})
 </script>
 
 <style scoped>

@@ -1,18 +1,17 @@
 import { request, withQuery } from './request'
 
-/** 系统只读目录，用于“从动作库添加”。 */
-export function getExerciseCatalog(query = {}) {
-  return request({ url: withQuery('/api/v1/exercise-catalog', query) })
-}
-
-/** 当前用户的动作库。query 可传 bodyPart、includeArchived。 */
+/** 系统动作及当前用户自定义动作。query: category, muscleGroup, equipment, keyword, page, pageSize。 */
 export function getExercises(query = {}) {
   return request({ url: withQuery('/api/v1/exercises', query) })
 }
 
-/** 目录动作：{ catalogExerciseId }；自定义：{ bodyPart, name, equipment, source:'custom' }。 */
-export function createExercise(data) {
-  return request({ url: '/api/v1/exercises', method: 'POST', data })
+export function getExercise(id) {
+  return request({ url: `/api/v1/exercises/${encodeURIComponent(id)}` })
+}
+
+/** data 只允许 name、category、muscleGroup、equipment。 */
+export function createExercise(data, idempotencyKey) {
+  return request({ url: '/api/v1/exercises', method: 'POST', data, idempotencyKey })
 }
 
 export function updateExercise(id, data) {

@@ -133,7 +133,11 @@ async function sendRequest({ url, method = 'GET', data, header = {}, auth = true
   error.errors = body?.errors || []
   error.requestId = body?.requestId || ''
 
-  if (auth && token && isAuthenticationFailure(response)) {
+  if (auth && isAuthenticationFailure(response)) {
+    if (!token) {
+      invalidateSession('')
+      throw error
+    }
     if (retried) {
       invalidateSession(token)
       throw error

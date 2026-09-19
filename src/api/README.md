@@ -39,6 +39,6 @@ try {
 
 ## 目前不是全部已联通
 
-当前 `server` 只实现 `GET /api/v1/health` 和 `GET /api/v1/training-plans` 测试列表。只有 `getTrainingPlans()` 对应一个已有业务接口；其余函数是后续接口位置的占位契约。当前 Vue 页面仍使用本地 `uni.setStorageSync`，本次不改变其运行行为。
+当前 `getTrainingPlans()` 已适配正式认证计划列表，并默认查询设备本地当日计划；页面其他训练数据仍主要使用本地 `uni.setStorageSync`。按日期保存草稿的旧 helper、完成训练、历史和周统计仍需后续页面联调。
 
-建议先配置域名并调用 `getTrainingPlans()` 验证网络，再按认证 → 动作/身体 → 训练 → 首页顺序迁移。正式上线前还需实现 Access Token 过期刷新、401 处理、Refresh Token 安全存储；不要把密码写入本地存储。
+调用 `getTrainingPlans()` 需要登录态。后续仍需按页面逐步接入计划编辑、训练完成、历史和首页聚合；不要把密码写入本地存储。

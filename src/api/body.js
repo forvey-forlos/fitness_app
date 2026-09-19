@@ -12,7 +12,7 @@ export function createMeasurement(data, idempotencyKey) {
   return request({ url: '/api/v1/body/measurements', method: 'POST', data, idempotencyKey })
 }
 
-/** query: metricKey, from, to, granularity, months, aggregate */
+/** query: startDate, endDate, page, pageSize */
 export function getMeasurements(query = {}) {
   return request({ url: withQuery('/api/v1/body/measurements', query) })
 }
@@ -23,4 +23,8 @@ export function updateMeasurement(id, data) {
 
 export function deleteMeasurement(id) {
   return request({ url: `/api/v1/body/measurements/${encodeURIComponent(id)}`, method: 'DELETE' })
+}
+
+export function getWeightTrend(range = 'week') {
+  return request({ url: withQuery('/api/v1/body/trends/weight', { range }) })
 }

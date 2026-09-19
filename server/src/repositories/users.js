@@ -36,4 +36,28 @@ async function findActiveById(id) {
   return rows[0] || null
 }
 
-module.exports = { findByNormalizedUsername, create, findForLogin, findActiveById }
+async function updateProfile(id, changes) {
+  const sets = []
+  const values = []
+  if (changes.username !== undefined) {
+    sets.push('username = ?', 'username_normalized = ?')
+    values.push(changes.username, changes.usernameNormalized)
+  }
+  if (changes.avatarUrl !== undefined) {
+    sets.push('avatar_url = ?')
+    values.push(changes.avatarUrl)
+  }
+  if (changes.timezone !== undefined) {
+    sets.push('timezone = ?')
+    values.push(changes.timezone)
+  }
+  values.push(id)
+  const [result] = await pool.execute(
+    ['UPDATE users SET', sets.join(', '), ', updated_at = UTC_TIMESTAMP(3)',
+      "WHERE id = ? AND status = 'active' AND deleted_at IS NULL"].join(' '),
+    values
+  )
+  return result.affectedRows > 0
+}
+
+module.exports = { findByNormalizedUsername, create, findForLogin, findActiveById, updateProfile }

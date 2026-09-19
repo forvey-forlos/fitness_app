@@ -14,7 +14,7 @@
           <view class="theme-switch" @tap="switchTheme">
             <view v-for="(_, index) in themes" :key="index" class="theme-dot" :class="{ active: index === themeIndex }" />
           </view>
-          <view class="avatar" @tap="showProfile">F</view>
+          <view class="avatar" @tap="showProfile"><image v-if="homeUser?.avatarUrl" :src="homeUser.avatarUrl" mode="aspectFill" style="width:100%;height:100%;border-radius:50%" /><text v-else>{{ avatarInitial }}</text></view>
         </view>
       </view>
 
@@ -22,9 +22,12 @@
         <view>
           <text class="eyebrow">GOOD MORNING</text>
           <text class="headline">今天也要比昨天更强一点</text>
-          <text class="date">{{ todayText }} · 保持节奏，享受每一次进步</text>
+          <text class="date">{{ displayUsername }} · {{ todayText }} · 保持节奏，享受每一次进步</text>
         </view>
+        <view class="streak"><text class="streak-icon">↗</text><view><text class="streak-value">{{ currentStreak }}</text><text class="streak-label">连续打卡</text></view></view>
       </view>
+      <view v-if="homeLoading" class="card-footer" @tap.stop><text>首页数据加载中…</text></view>
+      <view v-else-if="homeError" class="card-footer" @tap.stop><text>{{ homeError }}</text><text class="text-action" @tap="loadHomeSummary">重试 →</text></view>
 
       <view class="dashboard">
         <view class="module body-card" @tap.stop>
@@ -33,16 +36,16 @@
             <view class="score-ring"><view class="score-inner"><text class="score">{{ bmiValue }}</text><text class="unit">BMI</text></view></view>
             <view class="metrics">
               <view class="metric"><text class="metric-value">{{ displayWeight }}<small> kg</small></text><text class="metric-label">当前体重</text><text class="trend" :class="weightChangeClass">{{ weightChangeText }}</text></view>
-              <view class="metric"><text class="metric-value">{{ displayHeight }}<small> cm</small></text><text class="metric-label">身高</text><text class="trend">{{ bodyData.height ? '已同步' : '待录入' }}</text></view>
+              <view class="metric"><text class="metric-value">{{ displayHeight }}<small> cm</small></text><text class="metric-label">身高</text><text class="trend">{{ bodyHeight !== null ? '已同步' : '待录入' }}</text></view>
             </view>
           </view>
           <view class="trend-panel" hover-class="chart-pressed" @tap.stop="toggleTrend">
-            <view class="trend-head"><view><text class="trend-title">体重变化趋势</text><text class="trend-caption">{{ trendMode === 'week' ? '最近 7 天每日记录' : '最近 6 个月月末记录' }}</text></view><view class="range-switch"><text>{{ trendMode === 'week' ? '切换月趋势' : '切换周趋势' }}</text><text>↻</text></view></view>
+            <view class="trend-head"><view><text class="trend-title">体重变化趋势</text><text class="trend-caption">{{ trendMode === 'week' ? '最近 7 天每日记录' : '月趋势待接入' }}</text></view><view class="range-switch"><text>{{ trendMode === 'week' ? '切换月趋势' : '切换周趋势' }}</text><text>↻</text></view></view>
             <view class="chart-layout">
               <view class="y-axis"><text v-for="tick in yAxisTicks" :key="tick">{{ tick }}</text></view>
               <view class="chart-main">
                 <canvas id="weightTrendCanvas" canvas-id="weightTrendCanvas" class="trend-canvas" />
-                <view v-if="recordedPointCount === 0" class="chart-empty"><text>⌁</text><text>记录体重后生成趋势</text></view>
+                <view v-if="recordedPointCount === 0" class="chart-empty"><text>⌁</text><text>{{ trendMode === 'month' ? '月趋势待接入' : '记录体重后生成趋势' }}</text></view>
                 <view class="x-axis"><text v-for="point in trendSeries" :key="point.key">{{ point.label }}</text></view>
               </view>
             </view>
@@ -55,13 +58,13 @@
           <view class="today-plan" hover-class="plan-pressed" @tap="openTrainingPlan">
             <view class="plan-focus">
               <view class="plan-icon"><text>⌁</text></view>
-              <view class="plan-copy"><text class="plan-name">{{ backendPlan ? backendPlan.name : todayPlan.name }}</text><text class="plan-meta"> {{ todayPlanActionCount }} 个动作 ·预计 {{ backendPlan ? backendPlan.duration : todayPlanDuration }} 分钟</text></view>
+              <view class="plan-copy"><text class="plan-name">{{ todayPlan?.name || '今天暂无训练计划' }}</text><text class="plan-meta">{{ todayPlan ? `${todayPlanActionCount} 个动作 · 预计 ${todayPlanDuration} 分钟` : '点击创建今天的训练安排' }}</text></view>
               <text class="plan-arrow">›</text>
             </view>
-            <view class="plan-status"><text>{{ todayCompleted ? '今日训练已完成' : '今天的安排已经准备好' }}</text><text>{{ todayCompleted ? '查看计划' : '开始训练' }} →</text></view>
+            <view class="plan-status"><text>{{ todayCompleted ? '今日训练已完成' : todayPlan ? '今天的安排已经准备好' : '可以去创建今日计划' }}</text><text>{{ todayCompleted ? '查看计划' : todayPlan ? '开始训练' : '创建计划' }} →</text></view>
           </view>
           <view class="week-completion" hover-class="plan-pressed" @tap="openTrainingHistory">
-            <view class="completion-head"><view><text class="completion-title">训练完成点状图</text><text class="completion-caption">本周训练记录</text></view><text class="completion-count">{{ weekCompletedCount }}/7</text></view>
+            <view class="completion-head"><view><text class="completion-title">训练完成点状图</text><text class="completion-caption">{{ weekRangeText }}</text></view><text class="completion-count">{{ weekCompletedCount }}/7</text></view>
             <view class="completion-dots">
               <view v-for="day in weekCompletion" :key="day.key" class="completion-day" :class="{ today:day.today }">
                 <view class="completion-dot" :class="{ done:day.done }"><text v-if="day.done">✓</text></view><text>{{ day.label }}</text>
@@ -73,7 +76,7 @@
 
         <view class="module action-card" @tap.stop>
           <view class="module-head"><view><text class="module-kicker">LIBRARY</text><text class="module-title">动作管理</text></view><button class="icon-button" hover-class="pressed" @tap="addAction">＋</button></view>
-          <view class="library-count"><text class="big-number">{{ actionTotal }}</text><view><text class="count-label">已收录动作</text><text class="count-note">覆盖 {{ actionPartCount }} 个训练部位</text></view></view>
+          <view class="library-count"><text class="big-number">{{ actionTotal }}</text><view><text class="count-label">已收录动作</text><text class="count-note">覆盖 {{ actionPartCount }} 个训练部位 · 系统 {{ systemActionCount }} / 自定义 {{ customActionCount }}</text></view></view>
           <view class="body-parts">
             <view v-for="part in bodyParts" :key="part.name" class="part" @tap="openPart(part.name)"><view class="part-icon">{{ part.icon }}</view><view class="part-copy"><text>{{ part.name }}</text><text>{{ part.count }} 个动作</text></view><text class="arrow">›</text></view>
           </view>
@@ -87,17 +90,10 @@
 <script setup>
 import { computed, nextTick,ref, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { ACCESS_TOKEN_KEY, clearSession, getCurrentUser } from '../../api/auth'
-import { getTrainingPlans } from '../../api/training'
+import { ACCESS_TOKEN_KEY } from '../../api/auth'
+import { getHomeSummary } from '../../api/home'
 
-const backendPlan = ref(null)
-
-async function loadTrainingPlan() {
-  const plans = await getTrainingPlans()
-  backendPlan.value = Array.isArray(plans) && plans.length ? plans[0] : null
-}
 const THEME_STORAGE_KEY = 'fit_note_theme_index'
-const BODY_DATA_STORAGE_KEY = 'fit_note_body_profile'
 const themes = [
   { accent:'#7775bd', accent2:'#a59bd2', pale:'#f1f0f9', pale2:'#faf9fd', glow:'119,117,189' },
   { accent:'#5f9fa5', accent2:'#8bbdaf', pale:'#edf6f5', pale2:'#f8fbfa', glow:'95,159,165' },
@@ -110,49 +106,54 @@ const uiThemeIndex = ref(initialThemeIndex)
 const pendingTheme = ref(themes[initialThemeIndex])
 const themeChanging = ref(false)
 const transitionKey = ref(0)
-const TRAINING_PLAN_STORAGE_KEY='fit_note_training_plan'
-const TRAINING_HISTORY_STORAGE_KEY='fit_note_training_history'
-const defaultTrainingPlan={name:'今日训练',duration:20,exercises:[],parts:[]}
-const todayPlan=ref({...defaultTrainingPlan})
-const trainingHistory=ref([])
-const actionLibrary=ref([])
+const homeSummary=ref(null)
+const homeLoading=ref(false)
+const homeError=ref('')
+let homeRequestId=0
 const actionPartMeta=[{key:'shoulder',name:'肩部',icon:'▽'},{key:'chest',name:'胸部',icon:'◇'},{key:'back',name:'背部',icon:'⌁'},{key:'arms',name:'手臂',icon:'↯'},{key:'abs',name:'腹部',icon:'◎'},{key:'legs',name:'腿部',icon:'△'}]
-const fallbackActionCounts={shoulder:3,chest:3,back:3,arms:3,abs:3,legs:3}
-const actionCountMap=computed(()=>{const map={...fallbackActionCounts};if(actionLibrary.value.length){actionPartMeta.forEach(part=>{map[part.key]=actionLibrary.value.filter(item=>item.part===part.key).length})}return map})
-const bodyParts=computed(()=>actionPartMeta.filter(part=>['chest','back','legs'].includes(part.key)).map(part=>({...part,count:actionCountMap.value[part.key]})))
-const actionTotal=computed(()=>Object.values(actionCountMap.value).reduce((sum,count)=>sum+count,0))
-const actionPartCount=computed(()=>Object.values(actionCountMap.value).filter(count=>count>0).length)
+const actionCountMap=computed(()=>homeSummary.value?.exerciseLibrary?.partCounts||{})
+const bodyParts=computed(()=>actionPartMeta.filter(part=>['chest','back','legs'].includes(part.key)).map(part=>({...part,count:Number(actionCountMap.value[part.key]||0)})))
+const actionTotal=computed(()=>{const library=homeSummary.value?.exerciseLibrary;return Number(library?.systemCount||0)+Number(library?.customCount||0)})
+const systemActionCount=computed(()=>Number(homeSummary.value?.exerciseLibrary?.systemCount||0))
+const customActionCount=computed(()=>Number(homeSummary.value?.exerciseLibrary?.customCount||0))
+const actionPartCount=computed(()=>Number(homeSummary.value?.exerciseLibrary?.activePartCount||0))
 const themeStyle = computed(() => { const bg=themes[themeIndex.value],ui=themes[uiThemeIndex.value]; return { '--accent':ui.accent,'--accent-2':ui.accent2,'--pale':ui.pale,'--pale-2':ui.pale2,'--bg-pale':bg.pale,'--bg-pale-2':bg.pale2,'--glow-rgb':ui.glow } })
 const transitionStyle = computed(() => ({ '--next-pale':pendingTheme.value.pale,'--next-pale-2':pendingTheme.value.pale2 }))
-const todayText = computed(() => new Date().toLocaleDateString('zh-CN',{month:'long',day:'numeric',weekday:'long'}))
-const todayWeekday=computed(()=>['周日','周一','周二','周三','周四','周五','周六'][new Date().getDay()])
-const todayPlanActionCount=computed(()=>Array.isArray(todayPlan.value.parts)?todayPlan.value.parts.reduce((sum,part)=>sum+(Array.isArray(part.actions)?part.actions.length:0),0):(todayPlan.value.exercises?.length||0))
-const todayPlanDuration=computed(()=>todayPlan.value.duration||Math.max(20,todayPlanActionCount.value*8))
-const bodyData=ref({height:'',weight:'',weightHistory:[]})
-const trendMode=ref('week')
-const displayHeight=computed(()=>bodyData.value.height||'--')
-const displayWeight=computed(()=>bodyData.value.weight||'--')
-const bmiValue=computed(()=>{const height=Number(bodyData.value.height)/100,weight=Number(bodyData.value.weight);return height>0&&weight>0?(weight/(height*height)).toFixed(1):'--'})
-const sortedHistory=computed(()=>(Array.isArray(bodyData.value.weightHistory)?bodyData.value.weightHistory:[]).filter(item=>Number(item.value)>0&&item.date).slice().sort((a,b)=>(a.timestamp||new Date(a.date).getTime())-(b.timestamp||new Date(b.date).getTime())))
-const weightChange=computed(()=>{const list=sortedHistory.value;if(list.length<2)return null;return Number(list[list.length-1].value)-Number(list[list.length-2].value)})
+const homeUser=computed(()=>homeSummary.value?.user||null)
+const displayUsername=computed(()=>homeUser.value?.username||'朋友')
+const avatarInitial=computed(()=>Array.from(displayUsername.value)[0]||'F')
+const userTimezone=computed(()=>homeUser.value?.timezone||'Asia/Shanghai')
+function zonedDateText(options){try{return new Intl.DateTimeFormat('zh-CN',{timeZone:userTimezone.value,...options}).format(new Date())}catch(_){return new Date().toLocaleDateString('zh-CN',options)}}
+const todayText=computed(()=>zonedDateText({month:'long',day:'numeric',weekday:'long'}))
+const todayWeekday=computed(()=>zonedDateText({weekday:'short'}))
+function todayDateKey(){try{const parts=new Intl.DateTimeFormat('en-US',{timeZone:userTimezone.value,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());const field=(type)=>parts.find(part=>part.type===type)?.value;return [field('year'),field('month'),field('day')].join('-')}catch(_){return localDateKey(new Date())}}
+const currentStreak=computed(()=>Number(homeSummary.value?.weekTraining?.currentStreak||0))
+const todayPlan=computed(()=>homeSummary.value?.todayPlan||null)
+const todayPlanActionCount=computed(()=>Array.isArray(todayPlan.value?.exercises)?todayPlan.value.exercises.length:Number(todayPlan.value?.totalActionCount||0))
+const todayPlanDuration=computed(()=>todayPlan.value?.durationMinutes??'--')
+const todayCompleted=computed(()=>todayPlan.value?.status==='completed')
+const body=computed(()=>homeSummary.value?.body||null)
+const bodyHeight=computed(()=>body.value?.height??body.value?.profile?.height??null)
+const bodyWeight=computed(()=>body.value?.weight??body.value?.latestMeasurement?.weight??body.value?.profile?.weight??null)
+const displayHeight=computed(()=>bodyHeight.value??'--')
+const displayWeight=computed(()=>bodyWeight.value??'--')
+const bmiValue=computed(()=>body.value?.bmi??'--')
+const weightChange=computed(()=>body.value?.weightTrendSummary?.change??body.value?.lastWeightChange??null)
 const weightChangeText=computed(()=>weightChange.value===null?'暂无对比':Math.abs(weightChange.value)<.01?'与上次持平':`${weightChange.value>0?'↑':'↓'} ${Math.abs(weightChange.value).toFixed(1)} kg`)
 const weightChangeClass=computed(()=>weightChange.value===null?'':weightChange.value>0?'negative':weightChange.value<0?'positive':'')
-const latestRecordText=computed(()=>{const item=sortedHistory.value.at(-1);return item?item.date.replaceAll('-','/'): '暂无记录'})
+const latestRecordText=computed(()=>{const value=body.value?.latestMeasurement?.measuredAt??body.value?.latestMeasuredAt;if(!value)return'暂无记录';try{return new Intl.DateTimeFormat('zh-CN',{timeZone:userTimezone.value,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(value))}catch(_){return String(value).slice(0,10).replaceAll('-','/')}})
+const trendMode=ref('week')
 function pad(value){return String(value).padStart(2,'0')}
 function localDateKey(date){return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}`}
-function startOfWeek(){const now=new Date(),day=now.getDay()||7;return new Date(now.getFullYear(),now.getMonth(),now.getDate()-day+1)}
-function isTrainingCompleted(key){return trainingHistory.value.some(item=>item.date===key&&item.status==='completed')}
-const weekCompletion=computed(()=>{const start=startOfWeek(),today=localDateKey(new Date());return Array.from({length:7},(_,index)=>{const date=new Date(start.getFullYear(),start.getMonth(),start.getDate()+index),key=localDateKey(date);return{key,label:['一','二','三','四','五','六','日'][index],today:key===today,done:isTrainingCompleted(key)}})})
-const weekCompletedCount=computed(()=>weekCompletion.value.filter(day=>day.done).length)
-const todayCompleted=computed(()=>isTrainingCompleted(localDateKey(new Date())))
-function makeTrendSeries(){const history=sortedHistory.value,today=new Date();if(trendMode.value==='week'){return Array.from({length:7},(_,index)=>{const date=new Date(today.getFullYear(),today.getMonth(),today.getDate()-6+index),key=localDateKey(date);const matches=history.filter(item=>item.date===key);const latest=matches.at(-1);return{key,label:`${date.getMonth()+1}/${date.getDate()}`,value:latest?Number(latest.value):null}})}return Array.from({length:6},(_,index)=>{const date=new Date(today.getFullYear(),today.getMonth()-5+index,1),prefix=`${date.getFullYear()}-${pad(date.getMonth()+1)}`;const matches=history.filter(item=>String(item.date).startsWith(prefix));const latest=matches.at(-1);return{key:prefix,label:`${date.getMonth()+1}月`,value:latest?Number(latest.value):null}})}
+function shiftDateKey(key,days){const [year,month,day]=key.split('-').map(Number);return new Date(Date.UTC(year,month-1,day+days)).toISOString().slice(0,10)}
+const weekCompletion=computed(()=>{const days=homeSummary.value?.weekTraining?.days;const today=todayDateKey();return Array.from({length:7},(_,index)=>{const day=Array.isArray(days)?days[index]:null;return{key:day?.date||`empty-${index}`,label:['一','二','三','四','五','六','日'][index],today:day?.date===today,done:day?.completed===true}})})
+const weekCompletedCount=computed(()=>Number(homeSummary.value?.weekTraining?.completedCount||0))
+const weekRangeText=computed(()=>{const week=homeSummary.value?.weekTraining;return week?.weekStart&&week?.weekEnd?`${week.weekStart.slice(5).replace('-','/')} — ${week.weekEnd.slice(5).replace('-','/')}`:'本周训练记录'})
+function makeTrendSeries(){const today=todayDateKey();if(trendMode.value==='week'){const points=Array.isArray(body.value?.weightTrendSummary?.points)?body.value.weightTrendSummary.points:[];const byDate=new Map(points.map(point=>[point.date,point.value]));return Array.from({length:7},(_,index)=>{const key=shiftDateKey(today,index-6),date=new Date(key+'T00:00:00.000Z'),raw=byDate.get(key);return{key,label:`${date.getUTCMonth()+1}/${date.getUTCDate()}`,value:raw===null||raw===undefined?null:Number(raw)}})}const [year,month]=today.split('-').map(Number);return Array.from({length:6},(_,index)=>{const date=new Date(Date.UTC(year,month-6+index,1));return{key:`${date.getUTCFullYear()}-${pad(date.getUTCMonth()+1)}`,label:`${date.getUTCMonth()+1}月`,value:null}})}
 const trendSeries=computed(makeTrendSeries)
 const recordedPointCount=computed(()=>trendSeries.value.filter(point=>point.value!==null).length)
 const chartRange=computed(()=>{const values=trendSeries.value.filter(point=>point.value!==null).map(point=>point.value);if(!values.length)return{min:0,max:100};const low=Math.min(...values),high=Math.max(...values),padding=Math.max((high-low)*.25,.8);return{min:Math.floor((low-padding)*10)/10,max:Math.ceil((high+padding)*10)/10}})
 const yAxisTicks=computed(()=>{const {min,max}=chartRange.value;return[max,(max+min)/2,min].map(value=>value.toFixed(1))})
-function loadBodyData(){const saved=uni.getStorageSync(BODY_DATA_STORAGE_KEY)||{};bodyData.value={height:saved.height||'',weight:saved.weight||'',weightHistory:Array.isArray(saved.weightHistory)?saved.weightHistory:[]};nextTick(()=>setTimeout(drawWeightChart,60))}
-function loadActionLibrary(){const saved=uni.getStorageSync('fit_note_action_library');actionLibrary.value=Array.isArray(saved)?saved:[]}
-function loadTrainingData(){const savedPlan=uni.getStorageSync(TRAINING_PLAN_STORAGE_KEY),savedHistory=uni.getStorageSync(TRAINING_HISTORY_STORAGE_KEY);todayPlan.value=savedPlan&&typeof savedPlan==='object'?{...defaultTrainingPlan,...savedPlan,exercises:Array.isArray(savedPlan.exercises)?savedPlan.exercises:defaultTrainingPlan.exercises}:{...defaultTrainingPlan};trainingHistory.value=Array.isArray(savedHistory)?savedHistory:[]}
 function toggleTrend(){trendMode.value=trendMode.value==='week'?'month':'week';nextTick(drawWeightChart)}
 function drawWeightChart(){const query=uni.createSelectorQuery();query.select('#weightTrendCanvas').boundingClientRect(rect=>{if(!rect||!rect.width)return;const ctx=uni.createCanvasContext('weightTrendCanvas'),width=rect.width,height=rect.height,left=8,right=width-8,top=10,bottom=height-10,{min,max}=chartRange.value,points=trendSeries.value.map((point,index)=>({x:left+(right-left)*(index/Math.max(trendSeries.value.length-1,1)),y:point.value===null?null:top+(max-point.value)/(max-min||1)*(bottom-top),value:point.value}));ctx.clearRect(0,0,width,height);ctx.setStrokeStyle('rgba(132,138,154,.18)');ctx.setLineWidth(1);for(let i=0;i<3;i++){const y=top+(bottom-top)*i/2;ctx.beginPath();ctx.moveTo(left,y);ctx.lineTo(right,y);ctx.stroke()}const valid=points.filter(point=>point.y!==null);if(valid.length>1){const gradient=ctx.createLinearGradient(left,0,right,0),theme=themes[themeIndex.value];gradient.addColorStop(0,theme.accent);gradient.addColorStop(1,theme.accent2);ctx.beginPath();ctx.moveTo(valid[0].x,valid[0].y);valid.slice(1).forEach(point=>ctx.lineTo(point.x,point.y));ctx.setStrokeStyle(gradient);ctx.setLineWidth(3);ctx.setLineCap('round');ctx.setLineJoin('round');ctx.stroke()}const theme=themes[themeIndex.value];valid.forEach(point=>{ctx.beginPath();ctx.arc(point.x,point.y,4,0,Math.PI*2);ctx.setFillStyle('#fff');ctx.fill();ctx.setStrokeStyle(theme.accent);ctx.setLineWidth(2);ctx.stroke()});ctx.draw()}).exec()}
 
@@ -168,7 +169,7 @@ function switchTheme(){
 }
 function syncTheme(){ const value=Number(uni.getStorageSync(THEME_STORAGE_KEY)); if(Number.isInteger(value)&&value>=0&&value<themes.length){themeIndex.value=value;uiThemeIndex.value=value;pendingTheme.value=themes[value];themeChanging.value=false;nextTick(drawWeightChart)} }
 function notice(title){ uni.showToast({title,icon:'none'}) }
-function showProfile(){notice('个人中心将在后续开放')}
+function showProfile(){uni.navigateTo({url:'/pages/profile/profile'})}
 function editBodyData(){uni.navigateTo({url:'/pages/body-data/body-data'})}
 function openTrainingPlan(){uni.navigateTo({url:'/pages/training-plan/training-plan'})}
 function openTrainingHistory(){uni.navigateTo({url:'/pages/training-history/training-history'})}
@@ -176,31 +177,32 @@ function addAction(){uni.navigateTo({url:'/pages/action-management/action-manage
 function openPart(name){notice(`${name}动作列表将在后续开放`)}
 function openLibrary(){uni.navigateTo({url:'/pages/action-management/action-management'})}
 watch([trendSeries,themeIndex],()=>nextTick(drawWeightChart),{deep:true})
-async function verifyHomeSession() {
+async function loadHomeSummary() {
+  const requestId=++homeRequestId
   if (!uni.getStorageSync(ACCESS_TOKEN_KEY)) {
-    clearSession()
     uni.reLaunch({ url: '/pages/login/login' })
     return
   }
+  homeLoading.value=true
+  homeError.value=''
   try {
-    await getCurrentUser()
+    const summary=await getHomeSummary()
+    if(requestId!==homeRequestId)return
+    homeSummary.value=summary&&typeof summary==='object'?summary:null
+    if(!homeSummary.value)homeError.value='暂无首页数据，请稍后重试'
   } catch (error) {
-    if (error.statusCode === 401 || error.code === 'UNAUTHORIZED' ||
-        error.code === 'TOKEN_EXPIRED') {
-      clearSession()
-      uni.reLaunch({ url: '/pages/login/login' })
-    } else {
-      uni.showToast({ title: error.message || '登录状态验证失败', icon: 'none' })
+    if(requestId!==homeRequestId)return
+    if(error.statusCode!==401&&error.code!=='UNAUTHORIZED'&&error.code!=='TOKEN_EXPIRED'){
+      homeError.value=error.message||'首页加载失败，请稍后重试'
     }
-    return
-  }
-  try {
-    await loadTrainingPlan()
-  } catch (_) {
-    backendPlan.value = null
+  } finally {
+    if(requestId===homeRequestId){
+      homeLoading.value=false
+      nextTick(()=>setTimeout(drawWeightChart,60))
+    }
   }
 }
-onShow(()=>{syncTheme();loadBodyData();loadActionLibrary();loadTrainingData();verifyHomeSession()})
+onShow(()=>{syncTheme();loadHomeSummary()})
 </script>
 
 <style scoped>

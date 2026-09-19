@@ -11,7 +11,7 @@
       <view class="hero">
         <view class="hero-head">
           <view><text class="date">{{ todayText }}</text><text class="plan-title">{{ planTitle }}</text><text class="hero-meta">{{ totalActions }} 个动作 · 预计 {{ estimatedDuration }} 分钟</text></view>
-          <view class="status" :class="{completed:todayCompleted}">{{ todayCompleted?'今日已完成':'今日计划' }}</view>
+          <view class="status" :class="{completed:todayCompleted}" @tap="managePlan">{{ todayCompleted?'今日已完成':currentPlan?'管理计划':'今日计划' }}</view>
         </view>
         <view v-if="planParts.length" class="part-progress-list">
           <view v-for="part in planParts" :key="part.key" class="part-progress">
@@ -29,7 +29,7 @@
       </view>
 
       <view class="content">
-        <view class="content-head"><view><text class="section-title">训练内容</text><text class="section-caption">选择部位并录入预期与实际数据</text></view><text class="saved-tip">自动保存</text></view>
+        <view class="content-head"><view><text class="section-title">训练内容</text><text class="section-caption">选择部位并录入预期与实际数据</text></view><text class="saved-tip">{{ syncText }}</text></view>
         <view class="planner">
           <view class="part-column">
             <text class="column-label">训练部位</text>
@@ -52,15 +52,15 @@
                   </view>
                   <view class="metric-row target-row">
                     <text class="row-label">预期</text>
-                    <label><text>千克</text><input v-model="action.target.kg" type="digit" maxlength="6" placeholder="0"/></label>
-                    <label><text>个数</text><input v-model="action.target.reps" type="number" maxlength="4" placeholder="0"/></label>
-                    <label><text>组数</text><input v-model="action.target.sets" type="number" maxlength="3" placeholder="0"/></label>
+                    <label><text>千克</text><input v-model="action.target.kg" :disabled="todayCompleted" type="digit" maxlength="6" placeholder="0"/></label>
+                    <label><text>个数</text><input v-model="action.target.reps" :disabled="todayCompleted" type="number" maxlength="4" placeholder="0"/></label>
+                    <label><text>组数</text><input v-model="action.target.sets" :disabled="todayCompleted" type="number" maxlength="3" placeholder="0"/></label>
                   </view>
                   <view class="metric-row actual-row">
                     <text class="row-label">实际</text>
-                    <label><text>千克</text><input v-model="action.actual.kg" type="digit" maxlength="6" placeholder="点击输入"/></label>
-                    <label><text>个数</text><input v-model="action.actual.reps" type="number" maxlength="4" placeholder="点击输入"/></label>
-                    <label><text>组数</text><input v-model="action.actual.sets" type="number" maxlength="3" placeholder="点击输入"/></label>
+                    <label><text>千克</text><input v-model="action.actual.kg" :disabled="todayCompleted" type="digit" maxlength="6" placeholder="点击输入"/></label>
+                    <label><text>个数</text><input v-model="action.actual.reps" :disabled="todayCompleted" type="number" maxlength="4" placeholder="点击输入"/></label>
+                    <label><text>组数</text><input v-model="action.actual.sets" :disabled="todayCompleted" type="number" maxlength="3" placeholder="点击输入"/></label>
                   </view>
                 </view>
               </view>
@@ -69,45 +69,202 @@
             <view v-else class="part-empty"><view>＋</view><text>先从左侧添加训练部位</text><text>可选择动作管理中已有动作的部位</text></view>
           </view>
         </view>
-        <button class="complete-button" :class="{update:todayCompleted}" hover-class="pressed" @tap="completeTraining">{{ todayCompleted?'更新今日训练记录':'完成今日训练' }}</button>
+        <button class="complete-button" :class="{update:currentPlan}" hover-class="pressed" @tap="savePlan">{{ todayCompleted?'今日训练已完成':currentPlan?'保存计划修改':'创建今日计划' }}</button>
+        <button v-if="currentPlan&&!todayCompleted" class="complete-button update" :disabled="completing" hover-class="pressed" @tap="completeTraining">{{ completing?'正在完成训练…':'完成今日训练' }}</button>
       </view>
     </view>
   </view>
 </template>
 
 <script setup>
-import { computed,ref,watch } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
-const THEME_KEY='fit_note_theme_index',ACTION_KEY='fit_note_action_library',PLAN_KEY='fit_note_training_plan',HISTORY_KEY='fit_note_training_history'
+import { computed,ref } from 'vue'
+import { onLoad,onShow } from '@dcloudio/uni-app'
+import { getExercises } from '../../api/exercises'
+import {
+  completeTrainingPlan, createTrainingPlan, deleteTrainingPlan,
+  listTrainingPlans, updateTrainingPlan
+} from '../../api/training'
+const THEME_KEY='fit_note_theme_index'
 const themes=[{accent:'#7775bd',accent2:'#a59bd2',pale:'#f1f0f9',pale2:'#faf9fd',glow:'119,117,189'},{accent:'#5f9fa5',accent2:'#8bbdaf',pale:'#edf6f5',pale2:'#f8fbfa',glow:'95,159,165'},{accent:'#bd8073',accent2:'#cda56f',pale:'#faf1ed',pale2:'#fdf9f5',glow:'189,128,115'}]
 const parts=[{key:'shoulder',name:'肩部',short:'肩',icon:'▽'},{key:'chest',name:'胸部',short:'胸',icon:'◇'},{key:'back',name:'背部',short:'背',icon:'⌁'},{key:'arms',name:'手臂',short:'臂',icon:'↯'},{key:'abs',name:'腹部',short:'腹',icon:'◎'},{key:'legs',name:'腿部',short:'腿',icon:'△'}]
-const fallbackCatalog={shoulder:[['哑铃推举','哑铃'],['侧平举','哑铃'],['俯身飞鸟','哑铃']],chest:[['平板卧推','杠铃'],['上斜哑铃卧推','哑铃'],['俯卧撑','徒手']],back:[['高位下拉','器械'],['杠铃划船','杠铃'],['引体向上','单杠']],arms:[['哑铃弯举','哑铃'],['绳索下压','绳索'],['锤式弯举','哑铃']],abs:[['平板支撑','徒手'],['卷腹','徒手'],['悬垂举腿','单杠']],legs:[['深蹲','杠铃'],['罗马尼亚硬拉','杠铃'],['腿举','器械']]}
-const fallbackActions=parts.flatMap(part=>fallbackCatalog[part.key].map((item,index)=>({id:`preset-${part.key}-${index}`,part:part.key,name:item[0],equipment:item[1],custom:false})))
-const themeIndex=ref(0),actionLibrary=ref([]),planParts=ref([]),selectedPartKey=ref(''),history=ref([]),hydrated=ref(false)
+const equipmentLabels={barbell:'杠铃',dumbbell:'哑铃',machine:'器械',cable:'绳索',bodyweight:'徒手',other:'其他'}
+const themeIndex=ref(0),actionLibrary=ref([]),planParts=ref([]),selectedPartKey=ref('')
+const currentPlan=ref(null),selectedDate=ref(''),loading=ref(false),saving=ref(false),completing=ref(false),loadError=ref('')
+const completionAttempt=ref(null)
+const workoutStartedAt=ref('')
+const savedDraftSignature=ref('')
 const themeStyle=computed(()=>{const t=themes[themeIndex.value];return{'--accent':t.accent,'--accent-2':t.accent2,'--pale':t.pale,'--pale-2':t.pale2,'--glow-rgb':t.glow}})
-const todayText=computed(()=>new Date().toLocaleDateString('zh-CN',{month:'long',day:'numeric',weekday:'long'}))
+const todayText=computed(()=>new Date(selectedDate.value+'T00:00:00').toLocaleDateString('zh-CN',{month:'long',day:'numeric',weekday:'long'}))
 const activePart=computed(()=>planParts.value.find(part=>part.key===selectedPartKey.value)||null)
 const totalActions=computed(()=>planParts.value.reduce((sum,part)=>sum+part.actions.length,0))
 const completedActions=computed(()=>planParts.value.reduce((sum,part)=>sum+completedInPart(part),0))
 const planTitle=computed(()=>{if(!planParts.value.length)return'今日训练';if(planParts.value.length===1)return planParts.value[0].name+'训练';return planParts.value.map(part=>part.short).join('')+'训练'})
 const estimatedDuration=computed(()=>Math.max(20,totalActions.value*8))
+const todayCompleted=computed(()=>currentPlan.value?.status==='completed')
+const syncText=computed(()=>saving.value?'正在保存':loading.value?'正在同步':loadError.value?'同步失败':currentPlan.value?'云端已保存':'尚未创建')
 function pad(v){return String(v).padStart(2,'0')}
 function dateKey(){const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`}
-const todayCompleted=computed(()=>history.value.some(item=>item.date===dateKey()&&item.status==='completed'))
 function emptyMetrics(){return{kg:'',reps:'',sets:''}}
-function normalizeAction(action){return{id:action.id||`plan-${Date.now()}-${Math.random()}`,name:action.name||'未命名动作',equipment:action.equipment||'徒手',target:{...emptyMetrics(),...(action.target||{})},actual:{...emptyMetrics(),...(action.actual||{})}}}
+function equipmentName(value){return equipmentLabels[value]||value||'徒手'}
+function catalogAction(exercise){return{id:exercise.id,exerciseId:exercise.id,name:exercise.name,equipment:equipmentName(exercise.equipment),category:exercise.category,target:emptyMetrics(),actual:emptyMetrics(),restSeconds:null,notes:null}}
+function planAction(item){return{id:item.exerciseId,exerciseId:item.exerciseId,name:item.exercise?.name||'已归档动作',equipment:equipmentName(item.exercise?.equipment),category:item.exercise?.category,target:{kg:item.weight??'',reps:item.reps??'',sets:item.sets??''},actual:emptyMetrics(),restSeconds:item.restSeconds??null,notes:item.notes??null}}
+function draftSignature(){return JSON.stringify(planParts.value.map(part=>({key:part.key,actions:part.actions.map(action=>({exerciseId:action.exerciseId,target:action.target,restSeconds:action.restSeconds,notes:action.notes}))})))}
 function isActionDone(action){const actual=action.actual||{};return actual.kg!==''&&Number(actual.kg)>=0&&Number(actual.reps)>0&&Number(actual.sets)>0}
 function completedInPart(part){return part.actions.filter(isActionDone).length}
-function availableParts(){return parts.filter(part=>actionLibrary.value.some(action=>action.part===part.key)&&!planParts.value.some(item=>item.key===part.key))}
-function persistPlan(){if(!hydrated.value)return;const payload={date:dateKey(),name:planTitle.value,duration:estimatedDuration.value,exercises:planParts.value.flatMap(part=>part.actions.map(action=>action.name)),parts:JSON.parse(JSON.stringify(planParts.value)),updatedAt:Date.now()};uni.setStorageSync(PLAN_KEY,payload)}
-function load(){hydrated.value=false;const ti=Number(uni.getStorageSync(THEME_KEY));themeIndex.value=Number.isInteger(ti)&&themes[ti]?ti:0;const savedActions=uni.getStorageSync(ACTION_KEY);actionLibrary.value=Array.isArray(savedActions)?savedActions:fallbackActions;if(!Array.isArray(savedActions))uni.setStorageSync(ACTION_KEY,actionLibrary.value);const saved=uni.getStorageSync(PLAN_KEY),savedHistory=uni.getStorageSync(HISTORY_KEY),sameDay=saved?.date===dateKey();history.value=Array.isArray(savedHistory)?savedHistory:[];planParts.value=Array.isArray(saved?.parts)?saved.parts.map(part=>{const meta=parts.find(item=>item.key===part.key);return meta?{...meta,actions:Array.isArray(part.actions)?part.actions.map(item=>{const action=normalizeAction(item);if(!sameDay)action.actual=emptyMetrics();return action}):[]}:null}).filter(Boolean):[];selectedPartKey.value=planParts.value[0]?.key||'';hydrated.value=true;persistPlan()}
-function addPart(){const available=availableParts();if(!available.length){uni.showToast({title:'暂无可添加部位，请先管理动作库',icon:'none'});return}uni.showActionSheet({itemList:available.map(part=>part.name),success:({tapIndex})=>{const part=available[tapIndex];planParts.value.push({...part,actions:[]});selectedPartKey.value=part.key}})}
-function removePart(part){uni.showModal({title:`移除${part.name}？`,content:'该部位今天填写的数据会一并移除。',success:result=>{if(!result.confirm)return;planParts.value=planParts.value.filter(item=>item.key!==part.key);selectedPartKey.value=planParts.value[0]?.key||''}})}
-function addAction(){if(!activePart.value)return;const used=activePart.value.actions.map(item=>item.id),available=actionLibrary.value.filter(item=>item.part===activePart.value.key&&!used.includes(item.id));if(!available.length){uni.showToast({title:'该部位暂无更多动作',icon:'none'});return}uni.showActionSheet({itemList:available.map(item=>`${item.name} · ${item.equipment||'徒手'}`),success:({tapIndex})=>activePart.value.actions.push(normalizeAction(available[tapIndex]))})}
-function removeAction(action){activePart.value.actions=activePart.value.actions.filter(item=>item.id!==action.id)}
-function completeTraining(){if(!totalActions.value){uni.showToast({title:'请先添加训练动作',icon:'none'});return}const unfinished=totalActions.value-completedActions.value;if(unfinished){uni.showToast({title:`还有 ${unfinished} 个动作未填写实际数据`,icon:'none'});return}const wasCompleted=todayCompleted.value;persistPlan();const now=Date.now(),record={id:`${dateKey()}-${now}`,date:dateKey(),title:planTitle.value,duration:estimatedDuration.value,completedAt:now,status:'completed',parts:JSON.parse(JSON.stringify(planParts.value))},index=history.value.findIndex(item=>item.date===dateKey()&&item.status==='completed');if(index>=0)history.value.splice(index,1,record);else history.value.push(record);uni.setStorageSync(HISTORY_KEY,history.value);uni.showToast({title:wasCompleted?'今日记录已更新':'训练完成，真棒！',icon:'success'})}
+function availableParts(){return parts.filter(part=>actionLibrary.value.some(action=>action.category===part.key)&&!planParts.value.some(item=>item.key===part.key))}
+function applyPlan(plan){
+  const previousPlanId=currentPlan.value?.id
+  currentPlan.value=plan||null
+  if(plan?.status==='draft'&&previousPlanId!==plan.id)workoutStartedAt.value=new Date().toISOString()
+  if(!plan||plan.status==='completed')workoutStartedAt.value=''
+  if(!plan||completionAttempt.value&&(completionAttempt.value.planId!==plan.id||completionAttempt.value.version!==plan.version))completionAttempt.value=null
+  if(!plan){planParts.value=[];selectedPartKey.value='';savedDraftSignature.value='';return}
+  const byCategory=new Map()
+  for(const item of plan.exercises||[]){
+    const action=planAction(item),key=action.category
+    if(!byCategory.has(key))byCategory.set(key,[])
+    byCategory.get(key).push(action)
+  }
+  planParts.value=parts.filter(part=>byCategory.has(part.key)).map(part=>({...part,actions:byCategory.get(part.key)}))
+  selectedPartKey.value=planParts.value[0]?.key||''
+  savedDraftSignature.value=draftSignature()
+}
+async function loadExerciseLibrary(){
+  const items=[],query={page:1,pageSize:100}
+  for(;;){
+    const result=await getExercises(query)
+    items.push(...(Array.isArray(result?.items)?result.items:[]))
+    if(!result?.hasMore)break
+    query.page+=1
+  }
+  actionLibrary.value=items
+}
+function showError(error,fallback='请求失败'){
+  loadError.value=error?.message||fallback
+  const title=error?.code==='EXERCISE_UNAVAILABLE'?'计划中包含已失效或无权使用的动作':loadError.value
+  uni.showToast({title,icon:'none'})
+}
+async function loadPlan(){
+  const result=await listTrainingPlans({date:selectedDate.value,page:1,pageSize:20})
+  applyPlan(Array.isArray(result?.items)?result.items[0]||null:null)
+}
+async function load(){
+  if(loading.value)return
+  const ti=Number(uni.getStorageSync(THEME_KEY));themeIndex.value=Number.isInteger(ti)&&themes[ti]?ti:0
+  loading.value=true;loadError.value=''
+  try{await Promise.all([loadExerciseLibrary(),loadPlan()])}
+  catch(error){showError(error,'训练计划加载失败')}
+  finally{loading.value=false}
+}
+function ensureEditable(){if(!todayCompleted.value)return true;uni.showToast({title:'已完成计划不可修改',icon:'none'});return false}
+function addPart(){if(!ensureEditable())return;const available=availableParts();if(!available.length){uni.showToast({title:'暂无可添加部位，请先管理动作库',icon:'none'});return}uni.showActionSheet({itemList:available.map(part=>part.name),success:({tapIndex})=>{const part=available[tapIndex];planParts.value.push({...part,actions:[]});selectedPartKey.value=part.key}})}
+function removePart(part){if(!ensureEditable())return;uni.showModal({title:`移除${part.name}？`,content:'该部位今天填写的数据会一并移除。',success:result=>{if(!result.confirm)return;planParts.value=planParts.value.filter(item=>item.key!==part.key);selectedPartKey.value=planParts.value[0]?.key||''}})}
+function addAction(){if(!ensureEditable()||!activePart.value)return;const used=activePart.value.actions.map(item=>item.exerciseId),available=actionLibrary.value.filter(item=>item.category===activePart.value.key&&!used.includes(item.id));if(!available.length){uni.showToast({title:'该部位暂无更多动作',icon:'none'});return}uni.showActionSheet({itemList:available.map(item=>`${item.name} · ${equipmentName(item.equipment)}`),success:({tapIndex})=>activePart.value.actions.push(catalogAction(available[tapIndex]))})}
+function removeAction(action){if(!ensureEditable())return;activePart.value.actions=activePart.value.actions.filter(item=>item.id!==action.id)}
+function optionalNumber(value,integer=false){
+  if(value===''||value===null||value===undefined)return null
+  const number=Number(value)
+  if(!Number.isFinite(number)||number<0||integer&&!Number.isInteger(number))return NaN
+  return number
+}
+function payload(){
+  let sortOrder=0
+  return {
+    planDate:selectedDate.value,name:null,durationMinutes:estimatedDuration.value,
+    exercises:planParts.value.flatMap(part=>part.actions.map(action=>({
+      exerciseId:action.exerciseId,sets:optionalNumber(action.target.sets,true),
+      reps:optionalNumber(action.target.reps,true),weight:optionalNumber(action.target.kg),
+      restSeconds:action.restSeconds,notes:action.notes,sortOrder:++sortOrder
+    })))
+  }
+}
+function validPayload(data){
+  if(!data.exercises.length){uni.showToast({title:'请至少添加一个训练动作',icon:'none'});return false}
+  if(data.exercises.some(item=>[item.sets,item.reps,item.weight,item.restSeconds].some(Number.isNaN))){uni.showToast({title:'预期数据格式不正确',icon:'none'});return false}
+  return true
+}
+function requirePlanResponse(plan){
+  const valid=plan&&typeof plan==='object'&&typeof plan.id==='string'&&plan.id&&
+    Number.isInteger(plan.version)&&typeof plan.status==='string'&&
+    Array.isArray(plan.exercises)&&typeof plan.planDate==='string'&&
+    typeof plan.name==='string'&&plan.name
+  if(!valid){
+    const error=new Error('训练计划响应不完整，请重新获取')
+    error.code='INVALID_PLAN_RESPONSE'
+    throw error
+  }
+  return plan
+}
+async function savePlan(){
+  if(todayCompleted.value){uni.showToast({title:'已完成计划不可修改',icon:'none'});return}
+  if(saving.value)return
+  const data=payload()
+  if(!validPayload(data))return
+  saving.value=true;loadError.value=''
+  try{
+    const saved=currentPlan.value
+      ?await updateTrainingPlan(currentPlan.value.id,{...data,version:currentPlan.value.version})
+      :await createTrainingPlan(data,'plan-'+selectedDate.value+'-'+Date.now())
+    applyPlan(requirePlanResponse(saved))
+    uni.showToast({title:currentPlan.value?.version>1?'计划已更新':'计划已创建',icon:'success'})
+  }catch(error){
+    if(error?.code==='PLAN_VERSION_CONFLICT'){
+      uni.showModal({title:'计划已在其他位置更新',content:'不会覆盖服务器数据，点击确定后加载最新计划。',showCancel:false,success:()=>loadPlan().catch(loadError=>showError(loadError,'最新计划加载失败'))})
+    }else{
+      showError(error,error?.code==='PLAN_DATE_CONFLICT'?'当天已有训练计划':'计划保存失败')
+      if(error?.code==='PLAN_DATE_CONFLICT')await loadPlan().catch(()=>{})
+      if(error?.code==='EXERCISE_UNAVAILABLE')await loadExerciseLibrary().catch(()=>{})
+    }
+  }finally{saving.value=false}
+}
+async function completeTraining(){
+  const plan=currentPlan.value
+  if(!plan||plan.status==='completed'||completing.value)return
+  if(draftSignature()!==savedDraftSignature.value){uni.showToast({title:'请先保存计划修改',icon:'none'});return}
+  if(!Array.isArray(plan.exercises)||!plan.exercises.length){uni.showToast({title:'计划至少需要一个动作',icon:'none'});return}
+  if(!completionAttempt.value){
+    const completedAt=new Date().toISOString()
+    completionAttempt.value={
+      planId:plan.id,version:plan.version,startedAt:workoutStartedAt.value||null,completedAt,
+      key:'complete-'+plan.id+'-'+plan.version+'-'+Date.now()
+    }
+  }
+  const attempt=completionAttempt.value
+  completing.value=true;loadError.value=''
+  try{
+    await completeTrainingPlan(plan.id,{
+      version:attempt.version,completedAt:attempt.completedAt,
+      ...(attempt.startedAt?{startedAt:attempt.startedAt}:{})
+    },attempt.key)
+    completionAttempt.value=null
+    await loadPlan()
+    uni.showToast({title:'训练已完成',icon:'success'})
+  }catch(error){
+    if(error?.code==='TRAINING_ALREADY_COMPLETED'){
+      completionAttempt.value=null
+      await loadPlan().catch(()=>{})
+      uni.showToast({title:'该训练已完成',icon:'none'})
+    }else if(error?.code==='PLAN_VERSION_CONFLICT'){
+      completionAttempt.value=null
+      uni.showModal({title:'计划版本已变化',content:'不会重复完成训练，点击确定后加载最新计划。',showCancel:false,success:()=>loadPlan().catch(loadError=>showError(loadError,'最新计划加载失败'))})
+    }else showError(error,'完成训练失败，请稍后重试')
+  }finally{completing.value=false}
+}
+function managePlan(){
+  if(!currentPlan.value){load();return}
+  uni.showActionSheet({itemList:['刷新计划','删除计划'],success:({tapIndex})=>{
+    if(tapIndex===0){loadPlan().catch(error=>showError(error,'计划刷新失败'));return}
+    uni.showModal({title:`删除“${currentPlan.value.name}”？`,content:'删除后当天将恢复为无计划状态。',success:async result=>{
+      if(!result.confirm)return
+      saving.value=true
+      try{await deleteTrainingPlan(currentPlan.value.id);applyPlan(null);uni.showToast({title:'计划已删除',icon:'success'})}
+      catch(error){showError(error,'计划删除失败')}
+      finally{saving.value=false}
+    }})
+  }})
+}
 function goBack(){uni.navigateBack({fail:()=>uni.reLaunch({url:'/pages/home/home'})})}
-watch(planParts,persistPlan,{deep:true})
+onLoad(options=>{selectedDate.value=/^\d{4}-\d{2}-\d{2}$/.test(options?.date||'')?options.date:dateKey()})
 onShow(load)
 </script>
 

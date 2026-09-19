@@ -1,12 +1,22 @@
 const assert = require('node:assert/strict')
 const { after, before, test } = require('node:test')
+const { randomBytes } = require('node:crypto')
+const jwt = require('jsonwebtoken')
 
 const createApp = require('../src/app')
+const { createAuthMiddleware } = require('../src/middlewares/auth')
 
 const plans = [{ id: 1, name: '数据测试', duration: 99 }]
+const secret = randomBytes(48).toString('hex')
+const token = jwt.sign({}, secret, {
+  algorithm: 'HS256', subject: '550e8400-e29b-41d4-a716-446655440001', expiresIn: 1800
+})
+const authMiddleware = createAuthMiddleware({ tokenConfig: { accessSecret: secret } })
+const page = { items: plans, page: 1, pageSize: 20, total: 1, hasMore: false }
 const app = createApp({
+  authMiddleware,
   healthService: { checkDatabase: async () => 1 },
-  trainingPlanService: { listPlans: async () => plans }
+  trainingPlanService: { list: async () => page }
 })
 
 let server
@@ -27,9 +37,11 @@ test('v1 endpoints return the common envelope and request ID', async () => {
   for (const [path, data] of [
     ['/api/v1/health', { message: 'backend is running' }],
     ['/api/v1/db-test', { message: 'database connected', result: 1 }],
-    ['/api/v1/training-plans', plans]
+    ['/api/v1/training-plans', page]
   ]) {
-    const response = await fetch(`${baseUrl}${path}`)
+    const response = await fetch(`${baseUrl}${path}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
     const body = await response.json()
 
     assert.equal(response.status, 200)
@@ -49,10 +61,20 @@ test('legacy endpoints retain the current frontend response shape', async () => 
   ]
 
   for (const [path, body] of expected) {
-    const response = await fetch(`${baseUrl}${path}`)
+    const response = await fetch(`${baseUrl}${path}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
     assert.equal(response.status, 200)
     assert.deepEqual(await response.json(), body)
     assert.match(response.headers.get('x-request-id'), /^req_/)
+  }
+})
+
+test('formal and legacy plan lists both reject missing Access Token', async () => {
+  for (const path of ['/api/v1/training-plans', '/api/training-plans']) {
+    const response = await fetch(`${baseUrl}${path}`)
+    assert.equal(response.status, 401)
+    assert.equal((await response.json()).code, 'UNAUTHORIZED')
   }
 })
 
@@ -77,8 +99,9 @@ test('unknown routes and invalid JSON use the common error response', async () =
 
 test('database failures are sanitized on both v1 and legacy routes', async () => {
   const failingApp = createApp({
+    authMiddleware,
     healthService: { checkDatabase: async () => { throw new Error('private database detail') } },
-    trainingPlanService: { listPlans: async () => { throw new Error('private database detail') } }
+    trainingPlanService: { list: async () => { throw new Error('private database detail') } }
   })
   const listener = await new Promise((resolve) => {
     const running = failingApp.listen(0, '127.0.0.1', () => resolve(running))
@@ -93,7 +116,9 @@ test('database failures are sanitized on both v1 and legacy routes', async () =>
     assert.equal(v1Body.message, '服务端异常')
     assert.equal(v1Body.requestId, v1.headers.get('x-request-id'))
 
-    const legacy = await fetch(`${url}/api/training-plans`)
+    const legacy = await fetch(`${url}/api/training-plans`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
     assert.equal(legacy.status, 500)
     assert.deepEqual(await legacy.json(), { ok: false, message: 'failed to load training plans' })
   } finally {

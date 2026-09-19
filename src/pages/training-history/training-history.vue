@@ -6,14 +6,18 @@
         <view class="week-head"><view><text class="week-title">本周完成</text><text class="week-range">{{ weekRange }}</text></view><text class="score">{{ completedCount }}<small>/7</small></text></view>
         <view class="dots"><view v-for="day in weekDays" :key="day.key" class="day" :class="{ today:day.today }"><view class="dot" :class="{ done:day.done }">{{ day.done?'✓':'' }}</view><text>{{ day.label }}</text><text>{{ day.dateLabel }}</text></view></view>
       </view>
-      <view class="history-card"><view class="list-head"><text>完成记录</text><text>共 {{ history.length }} 次</text></view>
-        <view v-if="sortedHistory.length" class="history-list">
-          <view v-for="item in sortedHistory" :key="item.id" class="record">
+      <view class="history-card"><view class="list-head"><text>完成记录</text><text>共 {{ historyTotal }} 次</text></view>
+        <view v-if="loading" class="empty"><view>⌁</view><text>正在加载训练记录</text><text>请稍候</text></view>
+        <view v-else-if="loadError" class="empty"><view>!</view><text>训练记录加载失败</text><text>{{ loadError }}</text><button hover-class="pressed" @tap="load">重新加载</button></view>
+        <view v-else-if="history.length" class="history-list">
+          <view v-for="item in history" :key="item.id" class="record" @tap="loadDetail(item)">
             <view class="record-main"><view class="record-icon">✓</view><view class="record-copy"><text>{{ item.title }}</text><text>{{ formatDate(item.date) }} · {{ item.duration }} 分钟</text></view><text class="complete-label">已完成</text></view>
-            <view v-if="Array.isArray(item.parts)&&item.parts.length" class="record-details">
-              <view v-for="part in item.parts" :key="part.key" class="history-part">
-                <view class="history-part-head"><text>{{ part.name }}</text><text>{{ part.actions.length }} 个动作</text></view>
-                <view v-for="action in part.actions" :key="action.id" class="history-action"><text>{{ action.name }}</text><text>{{ formatActual(action) }}</text></view>
+            <view v-if="detailLoadingId===item.id" class="record-details"><text class="week-range">正在加载详情…</text></view>
+            <view v-else-if="details[item.id]" class="record-details">
+              <view class="history-part">
+                <view class="history-part-head"><text>{{ details[item.id].planNameSnapshot }}</text><text>{{ details[item.id].exercises.length }} 个动作</text></view>
+                <view v-for="action in details[item.id].exercises" :key="action.id" class="history-action"><text>{{ action.exerciseNameSnapshot }}</text><text>{{ formatSnapshot(action) }}</text></view>
+                <view v-if="!details[item.id].exercises.length" class="history-action"><text>没有动作快照</text><text>—</text></view>
               </view>
             </view>
           </view>
@@ -27,20 +31,62 @@
 <script setup>
 import { computed,ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-const THEME_KEY='fit_note_theme_index',HISTORY_KEY='fit_note_training_history'
+import { getTrainingHistory, getWeeklyTrainingStats, listTrainingHistory } from '../../api/training'
+const THEME_KEY='fit_note_theme_index'
 const themes=[{accent:'#7775bd',accent2:'#a59bd2',pale:'#f1f0f9',pale2:'#faf9fd',glow:'119,117,189'},{accent:'#5f9fa5',accent2:'#8bbdaf',pale:'#edf6f5',pale2:'#f8fbfa',glow:'95,159,165'},{accent:'#bd8073',accent2:'#cda56f',pale:'#faf1ed',pale2:'#fdf9f5',glow:'189,128,115'}]
 const themeIndex=ref(0),history=ref([])
+const historyTotal=ref(0),weekStats=ref({weekStart:'',weekEnd:'',completedCount:0,currentStreak:0,days:[]})
+const details=ref({}),detailLoadingId=ref(''),loading=ref(false),loadError=ref('')
 const themeStyle=computed(()=>{const t=themes[themeIndex.value];return{'--accent':t.accent,'--accent-2':t.accent2,'--pale':t.pale,'--pale-2':t.pale2,'--glow-rgb':t.glow}})
-function pad(v){return String(v).padStart(2,'0')}
-function dateKey(d){return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`}
-function monday(){const n=new Date(),day=n.getDay()||7;return new Date(n.getFullYear(),n.getMonth(),n.getDate()-day+1)}
-const weekDays=computed(()=>{const start=monday(),today=dateKey(new Date());return Array.from({length:7},(_,i)=>{const d=new Date(start.getFullYear(),start.getMonth(),start.getDate()+i),key=dateKey(d);return{key,label:['一','二','三','四','五','六','日'][i],dateLabel:`${d.getMonth()+1}/${d.getDate()}`,today:key===today,done:history.value.some(item=>item.date===key&&item.status==='completed')}})})
-const completedCount=computed(()=>weekDays.value.filter(day=>day.done).length)
-const weekRange=computed(()=>`${weekDays.value[0]?.dateLabel||''} — ${weekDays.value[6]?.dateLabel||''}`)
-const sortedHistory=computed(()=>history.value.slice().sort((a,b)=>(b.completedAt||0)-(a.completedAt||0)))
-function formatDate(value){const [y,m,d]=String(value).split('-');return `${y}年${Number(m)}月${Number(d)}日`}
-function formatActual(action){const actual=action.actual||{};return `${actual.kg||0}kg · ${actual.reps||0}个 · ${actual.sets||0}组`}
-function load(){const ti=Number(uni.getStorageSync(THEME_KEY));themeIndex.value=Number.isInteger(ti)&&themes[ti]?ti:0;const saved=uni.getStorageSync(HISTORY_KEY);history.value=Array.isArray(saved)?saved:[]}
+const todayKey=computed(()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')})
+const weekDays=computed(()=>Array.isArray(weekStats.value.days)?weekStats.value.days.map((day,index)=>({key:day.date||String(index),label:['一','二','三','四','五','六','日'][index],dateLabel:day.date?day.date.slice(5).replace('-','/'):'--/--',today:day.date===todayKey.value,done:day.completed===true})):[])
+const completedCount=computed(()=>Number(weekStats.value.completedCount||0))
+const currentStreak=computed(()=>Number(weekStats.value.currentStreak||0))
+const weekRange=computed(()=>weekStats.value.weekStart&&weekStats.value.weekEnd?`${weekStats.value.weekStart.slice(5).replace('-','/')} — ${weekStats.value.weekEnd.slice(5).replace('-','/')} · 连续 ${currentStreak.value} 天`:'本周暂无统计')
+function formatDate(value){
+  const [y,m,d]=String(value||'').split('-')
+  return y&&m&&d?`${y}年${Number(m)}月${Number(d)}日`:'日期未知'
+}
+function formatSnapshot(action){
+  const weight=action.weight===null||action.weight===undefined?'--':action.weight
+  const reps=action.reps===null||action.reps===undefined?'--':action.reps
+  const sets=action.sets===null||action.sets===undefined?'--':action.sets
+  return `${weight}kg · ${reps}个 · ${sets}组${action.notes?' · '+action.notes:''}`
+}
+async function loadHistory(query={}){
+  const items=[],request={...query,page:1,pageSize:20}
+  let total=0
+  for(;;){
+    const result=await listTrainingHistory(request)
+    items.push(...(Array.isArray(result?.items)?result.items:[]))
+    total=Number(result?.total||items.length)
+    if(!result?.hasMore)break
+    request.page+=1
+  }
+  history.value=items
+  historyTotal.value=total
+}
+async function load(){
+  if(loading.value)return
+  const ti=Number(uni.getStorageSync(THEME_KEY));themeIndex.value=Number.isInteger(ti)&&themes[ti]?ti:0
+  loading.value=true;loadError.value=''
+  try{
+    const [,weekly]=await Promise.all([loadHistory(),getWeeklyTrainingStats()])
+    weekStats.value={weekStart:weekly?.weekStart||'',weekEnd:weekly?.weekEnd||'',completedCount:Number(weekly?.completedCount||0),currentStreak:Number(weekly?.currentStreak||0),days:Array.isArray(weekly?.days)?weekly.days:[]}
+  }catch(error){loadError.value=error?.message||'网络请求失败'}
+  finally{loading.value=false}
+}
+async function loadDetail(item){
+  if(details.value[item.id]||detailLoadingId.value)return
+  detailLoadingId.value=item.id
+  try{
+    const detail=await getTrainingHistory(item.id)
+    details.value={...details.value,[item.id]:{...detail,exercises:Array.isArray(detail?.exercises)?detail.exercises:[]}}
+  }catch(error){
+    const title=error?.code==='NOT_FOUND'?'训练历史不存在':(error?.message||'历史详情加载失败')
+    uni.showToast({title,icon:'none'})
+  }finally{detailLoadingId.value=''}
+}
 function goBack(){uni.navigateBack({delta:1})}
 function goPlan(){uni.redirectTo({url:'/pages/training-plan/training-plan'})}
 onShow(load)

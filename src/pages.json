@@ -36,6 +36,13 @@
 			}
 	},
 		{
+			"path": "pages/profile/profile",
+			"style": {
+				"navigationStyle": "custom",
+				"navigationBarTitleText": "个人资料"
+			}
+	},
+		{
 			"path": "pages/training-plan/training-plan",
 			"style": {
 				"navigationStyle": "custom",

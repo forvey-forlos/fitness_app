@@ -1,44 +1,60 @@
 import { request, withQuery } from './request'
 
-/** 当前 server 已实现的测试列表接口：GET /api/v1/training-plans。 */
-export function getTrainingPlans() {
-  return request({ url: '/api/v1/training-plans' })
+export function listTrainingPlans(query = {}) {
+  return request({ url: withQuery('/api/v1/training-plans', query) })
 }
 
-function datePath(date) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('date 必须是 YYYY-MM-DD')
-  return `/api/v1/training-plans/${date}`
+/** 兼容旧数组消费方式；首页现在使用 /home/summary，不调用此 helper。 */
+export async function getTrainingPlans(date) {
+  const now = new Date()
+  const selectedDate = date || [
+    now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0')
+  ].join('-')
+  const result = await listTrainingPlans({ date: selectedDate })
+  const items = Array.isArray(result) ? result : (result?.items || [])
+  return items.map((plan) => ({
+    ...plan, duration: plan.durationMinutes ?? plan.duration
+  }))
 }
 
-/** 某日计划草稿；当前前端按日期存储，不使用 /training-plans 列表接口。 */
-export function getTrainingPlan(date) {
-  return request({ url: datePath(date) })
+export function getTrainingPlan(id) {
+  return request({ url: `/api/v1/training-plans/${encodeURIComponent(id)}` })
 }
 
-export function saveTrainingPlan(date, plan) {
-  return request({ url: datePath(date), method: 'PUT', data: plan })
+export function createTrainingPlan(data, idempotencyKey) {
+  return request({ url: '/api/v1/training-plans', method: 'POST', data, idempotencyKey })
 }
 
-export function completeTrainingPlan(date, payload, idempotencyKey) {
-  return request({ url: `${datePath(date)}/complete`, method: 'POST', data: payload, idempotencyKey })
+export function updateTrainingPlan(id, data) {
+  return request({ url: `/api/v1/training-plans/${encodeURIComponent(id)}`, method: 'PUT', data })
 }
 
+export function deleteTrainingPlan(id) {
+  return request({ url: `/api/v1/training-plans/${encodeURIComponent(id)}`, method: 'DELETE' })
+}
+
+export function completeTrainingPlan(id, payload, idempotencyKey) {
+  return request({ url: `/api/v1/training-plans/${encodeURIComponent(id)}/complete`, method: 'POST', data: payload, idempotencyKey })
+}
+
+export function listTrainingHistory(query = {}) {
+  return request({ url: withQuery('/api/v1/training-history', query) })
+}
+
+export function getTrainingHistory(id) {
+  return request({ url: `/api/v1/training-history/${encodeURIComponent(id)}` })
+}
+
+export function getWeeklyTrainingStats(query = {}) {
+  return request({ url: withQuery('/api/v1/training-stats/week', query) })
+}
+
+/** 旧调用名兼容；正式路径使用 /training-history。 */
 export function getTrainingRecords(query = {}) {
-  return request({ url: withQuery('/api/v1/training-records', query) })
+  return listTrainingHistory(query)
 }
 
 export function getTrainingRecord(id) {
-  return request({ url: `/api/v1/training-records/${encodeURIComponent(id)}` })
-}
-
-export function updateTrainingRecord(id, data) {
-  return request({ url: `/api/v1/training-records/${encodeURIComponent(id)}`, method: 'PATCH', data })
-}
-
-export function deleteTrainingRecord(id) {
-  return request({ url: `/api/v1/training-records/${encodeURIComponent(id)}`, method: 'DELETE' })
-}
-
-export function getWeeklyTrainingStats({ weekStart, timezone = 'Asia/Shanghai' } = {}) {
-  return request({ url: withQuery('/api/v1/training-stats/weekly', { weekStart, timezone }) })
+  return getTrainingHistory(id)
 }

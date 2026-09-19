@@ -1,6 +1,6 @@
 import { request, withQuery } from './request'
 
-/** 首页卡片聚合：身体摘要、今日计划、周完成点、动作库数量。 */
-export function getHomeSummary({ date, timezone = 'Asia/Shanghai' } = {}) {
+/** 首页聚合；默认不传 date/timezone，由后端按登录用户时区确定今天。 */
+export function getHomeSummary({ date, timezone } = {}) {
   return request({ url: withQuery('/api/v1/home/summary', { date, timezone }) })
 }

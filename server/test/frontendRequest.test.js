@@ -82,3 +82,20 @@ test('refresh failure clears the entire session and redirects to login', async (
   assert.equal(storage.has(api.USER_KEY), false)
   assert.deepEqual(redirects, ['/pages/login/login'])
 })
+
+test('protected request without a local token redirects to login on unified 401', async () => {
+  const api = await import(moduleUrl)
+  storage.clear()
+  redirects.length = 0
+  api.resetAuthRedirect()
+  handler = (options) => {
+    assert.equal(options.header.Authorization, undefined)
+    options.success({ statusCode: 401, data: { code: 'UNAUTHORIZED', message: 'login required' } })
+  }
+
+  await assert.rejects(api.request({ url: '/api/v1/users/me' }), { code: 'UNAUTHORIZED' })
+  assert.equal(storage.has(api.ACCESS_TOKEN_KEY), false)
+  assert.equal(storage.has(api.REFRESH_TOKEN_KEY), false)
+  assert.equal(storage.has(api.USER_KEY), false)
+  assert.deepEqual(redirects, ['/pages/login/login'])
+})

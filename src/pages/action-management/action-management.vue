@@ -5,7 +5,7 @@
       <view class="topbar">
         <view class="back" hover-class="pressed" @tap="goBack"><text>‹</text><text>返回首页</text></view>
         <view class="brand"><view class="brand-mark"/><text>FIT NOTE</text></view>
-        <view class="sync-badge"><view class="sync-dot"/><text>主题已同步</text></view>
+        <view class="sync-badge"><view class="sync-dot"/><text>{{ syncText }}</text></view>
       </view>
 
       <view class="hero">
@@ -31,19 +31,20 @@
           <view v-if="groupActions(part.key).length" class="action-list">
             <view v-for="action in groupActions(part.key)" :key="action.id" class="action-row" hover-class="row-pressed">
               <view class="action-index">{{ action.name.slice(0,1) }}</view>
-              <view class="action-copy"><text class="action-name">{{ action.name }}</text><view class="action-meta"><text>{{ action.equipment || '徒手' }}</text><text class="source" :class="{ custom: action.custom }">{{ action.custom ? '自定义' : '动作库' }}</text></view></view>
-              <view class="row-actions"><text class="edit" @tap="renameAction(action)">编辑</text><text class="remove" @tap="removeAction(action)">×</text></view>
+              <view class="action-copy"><text class="action-name">{{ action.name }}</text><view class="action-meta"><text>{{ equipmentName(action.equipment) }}</text><text class="source" :class="{ custom: action.custom }">{{ action.custom ? '自定义' : '系统动作' }}</text></view></view>
+              <view v-if="action.custom" class="row-actions"><text class="edit" @tap="renameAction(action)">编辑</text><text class="remove" @tap="removeAction(action)">×</text></view>
+              <view v-else class="row-actions"><text class="edit">只读</text></view>
             </view>
           </view>
           <view v-else class="empty"><view class="empty-icon">＋</view><text>这个部位还没有动作</text><text>从动作库选择，或创建自己的动作</text></view>
 
           <view class="group-buttons">
-            <button class="library-button" hover-class="button-pressed" @tap="addFromLibrary(part)"><text>⌕</text> 从动作库添加</button>
+            <button class="library-button" hover-class="button-pressed" @tap="filterLibrary(part)"><text>⌕</text> 搜索 / 筛选</button>
             <button class="custom-button" hover-class="button-pressed" @tap="addCustom(part)"><text>＋</text> 自定义动作</button>
           </view>
         </view>
       </view>
-      <view class="footer-tip"><text>✓</text><text>动作库变更会自动同步到首页</text></view>
+      <view class="footer-tip" @tap="loadExercises()"><text>{{ loadError ? '!' : '✓' }}</text><text>{{ loadError || filterDescription }}</text></view>
     </view>
   </view>
 </template>
@@ -51,9 +52,9 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { onLoad, onReady, onShow } from '@dcloudio/uni-app'
+import { createExercise, deleteExercise, getExercises, updateExercise } from '../../api/exercises'
 
 const THEME_STORAGE_KEY='fit_note_theme_index'
-const ACTION_STORAGE_KEY='fit_note_action_library'
 const themes=[
   {accent:'#7775bd',accent2:'#a59bd2',pale:'#f1f0f9',pale2:'#faf9fd',glow:'119,117,189'},
   {accent:'#5f9fa5',accent2:'#8bbdaf',pale:'#edf6f5',pale2:'#f8fbfa',glow:'95,159,165'},
@@ -67,37 +68,130 @@ const parts=[
   {key:'abs',name:'腹部',english:'CORE',icon:'◎',description:'提升核心稳定与躯干控制能力'},
   {key:'legs',name:'腿部',english:'LEGS',icon:'△',description:'建立下肢力量、稳定性与爆发力'}
 ]
-const catalog={
-  shoulder:[['哑铃推举','哑铃'],['侧平举','哑铃'],['俯身飞鸟','哑铃'],['面拉','绳索'],['阿诺德推举','哑铃']],
-  chest:[['平板卧推','杠铃'],['上斜哑铃卧推','哑铃'],['俯卧撑','徒手'],['绳索夹胸','绳索'],['双杠臂屈伸','双杠']],
-  back:[['高位下拉','器械'],['杠铃划船','杠铃'],['引体向上','单杠'],['坐姿划船','器械'],['单臂哑铃划船','哑铃']],
-  arms:[['哑铃弯举','哑铃'],['绳索下压','绳索'],['锤式弯举','哑铃'],['窄距卧推','杠铃'],['臂屈伸','徒手']],
-  abs:[['平板支撑','徒手'],['卷腹','徒手'],['悬垂举腿','单杠'],['俄罗斯转体','负重'],['死虫式','徒手']],
-  legs:[['深蹲','杠铃'],['罗马尼亚硬拉','杠铃'],['腿举','器械'],['箭步蹲','哑铃'],['提踵','器械']]
+const muscleOptions={
+  shoulder:[['shoulder','肩部']],chest:[['chest','胸部']],back:[['back','背部']],
+  arms:[['biceps','肱二头肌'],['triceps','肱三头肌']],
+  abs:[['core','核心']],legs:[['legs','腿部'],['glutes','臀部']]
 }
-const defaultActions=parts.flatMap(part=>catalog[part.key].slice(0,3).map((item,index)=>({id:`preset-${part.key}-${index}`,part:part.key,name:item[0],equipment:item[1],custom:false})))
-const savedActions=uni.getStorageSync(ACTION_STORAGE_KEY)
-const actions=ref(Array.isArray(savedActions)?savedActions:defaultActions)
+const equipmentOptions=[
+  ['barbell','杠铃'],['dumbbell','哑铃'],['machine','器械'],['cable','绳索'],
+  ['bodyweight','徒手'],['other','其他']
+]
+const actions=ref([])
 const savedTheme=Number(uni.getStorageSync(THEME_STORAGE_KEY))
 const themeIndex=ref(Number.isInteger(savedTheme)&&savedTheme>=0&&savedTheme<themes.length?savedTheme:0)
 const themeStyle=computed(()=>{const t=themes[themeIndex.value];return{'--accent':t.accent,'--accent-2':t.accent2,'--pale':t.pale,'--pale-2':t.pale2,'--glow-rgb':t.glow}})
 const activePartCount=computed(()=>parts.filter(part=>groupActions(part.key).length).length)
 const launchOptions=ref({})
+const filters=ref({})
+const loading=ref(false)
+const mutating=ref(false)
+const loadError=ref('')
+const syncText=computed(()=>mutating.value?'正在保存':loading.value?'正在同步':loadError.value?'同步失败':'云端已同步')
+const filterDescription=computed(()=>{
+  const values=filters.value
+  if(!Object.keys(values).length)return'系统动作与自定义动作均来自当前账号'
+  const labels=[]
+  if(values.category)labels.push(parts.find(part=>part.key===values.category)?.name||values.category)
+  if(values.muscleGroup)labels.push(muscleOptions[values.category]?.find(item=>item[0]===values.muscleGroup)?.[1]||values.muscleGroup)
+  if(values.equipment)labels.push(equipmentName(values.equipment))
+  if(values.keyword)labels.push('“'+values.keyword+'”')
+  return '当前筛选：'+labels.join(' · ')
+})
 
-if(!Array.isArray(savedActions))uni.setStorageSync(ACTION_STORAGE_KEY,actions.value)
-function groupActions(key){return actions.value.filter(item=>item.part===key)}
-function persist(){uni.setStorageSync(ACTION_STORAGE_KEY,actions.value)}
+function groupActions(key){return actions.value.filter(item=>item.category===key)}
+function equipmentName(value){return equipmentOptions.find(item=>item[0]===value)?.[1]||value||'其他'}
 function syncTheme(){const value=Number(uni.getStorageSync(THEME_STORAGE_KEY));if(Number.isInteger(value)&&value>=0&&value<themes.length)themeIndex.value=value}
 function goBack(){uni.navigateBack({fail:()=>uni.reLaunch({url:'/pages/home/home'})})}
 function scrollToPart(key){uni.pageScrollTo({selector:`#group-${key}`,duration:420})}
-function addFromLibrary(part){const activeNames=groupActions(part.key).map(item=>item.name),available=catalog[part.key].filter(item=>!activeNames.includes(item[0]));if(!available.length){uni.showToast({title:'该部位动作已全部添加',icon:'none'});return}uni.showActionSheet({itemList:available.map(item=>`${item[0]} · ${item[1]}`),success:({tapIndex})=>{const selected=available[tapIndex];actions.value.push({id:`preset-${part.key}-${Date.now()}`,part:part.key,name:selected[0],equipment:selected[1],custom:false});persist();uni.showToast({title:'已添加',icon:'success'})}})}
-function addCustom(part){uni.showModal({title:`添加${part.name}动作`,editable:true,placeholderText:'请输入动作名称',success:result=>{if(!result.confirm)return;const name=String(result.content||'').trim();if(!name){uni.showToast({title:'动作名称不能为空',icon:'none'});return}if(groupActions(part.key).some(item=>item.name===name)){uni.showToast({title:'该动作已存在',icon:'none'});return}actions.value.push({id:`custom-${Date.now()}`,part:part.key,name,equipment:'自定义',custom:true});persist();uni.showToast({title:'创建成功',icon:'success'})}})}
-function renameAction(action){uni.showModal({title:'编辑动作名称',editable:true,content:action.name,placeholderText:'请输入动作名称',success:result=>{if(!result.confirm)return;const name=String(result.content||'').trim();if(!name){uni.showToast({title:'名称不能为空',icon:'none'});return}action.name=name;persist()}})}
-function removeAction(action){uni.showModal({title:`移除“${action.name}”？`,content:'移除后可再次从动作库添加。',success:result=>{if(!result.confirm)return;actions.value=actions.value.filter(item=>item.id!==action.id);persist()}})}
-function choosePartForAdd(){uni.showActionSheet({itemList:parts.map(part=>part.name),success:({tapIndex})=>addFromLibrary(parts[tapIndex])})}
+function showError(error,fallback='请求失败'){
+  loadError.value=error?.message||fallback
+  const title=error?.code==='EXERCISE_ALREADY_EXISTS'?'当前部位已存在同名动作':loadError.value
+  uni.showToast({title,icon:'none'})
+}
+async function loadExercises(nextFilters=filters.value){
+  if(loading.value)return
+  loading.value=true;loadError.value=''
+  try{
+    const query={...nextFilters,page:1,pageSize:100},items=[]
+    for(;;){
+      const result=await getExercises(query)
+      items.push(...(Array.isArray(result?.items)?result.items:[]))
+      if(!result?.hasMore)break
+      query.page+=1
+    }
+    filters.value={...nextFilters}
+    actions.value=items
+  }catch(error){showError(error,'动作库加载失败')}
+  finally{loading.value=false}
+}
+function filterLibrary(part){
+  uni.showActionSheet({itemList:['显示全部动作','搜索名称','按目标肌群','按器械'],success:({tapIndex})=>{
+    if(tapIndex===0){loadExercises({});return}
+    if(tapIndex===1){
+      uni.showModal({title:`搜索${part.name}动作`,editable:true,placeholderText:'输入动作名称关键词',success:result=>{
+        if(!result.confirm)return
+        const keyword=String(result.content||'').trim()
+        if(!keyword){uni.showToast({title:'请输入搜索关键词',icon:'none'});return}
+        loadExercises({category:part.key,keyword})
+      }})
+      return
+    }
+    if(tapIndex===2){
+      const options=muscleOptions[part.key]
+      uni.showActionSheet({itemList:options.map(item=>item[1]),success:({tapIndex:index})=>loadExercises({category:part.key,muscleGroup:options[index][0]})})
+      return
+    }
+    uni.showActionSheet({itemList:equipmentOptions.map(item=>item[1]),success:({tapIndex:index})=>loadExercises({category:part.key,equipment:equipmentOptions[index][0]})})
+  }})
+}
+function addCustom(part){
+  const muscles=muscleOptions[part.key]
+  const chooseEquipment=muscleGroup=>uni.showActionSheet({itemList:equipmentOptions.map(item=>item[1]),success:({tapIndex})=>{
+    const equipment=equipmentOptions[tapIndex][0]
+    uni.showModal({title:`添加${part.name}动作`,editable:true,placeholderText:'请输入动作名称',success:async result=>{
+      if(!result.confirm)return
+      const name=String(result.content||'').trim()
+      if(!name){uni.showToast({title:'动作名称不能为空',icon:'none'});return}
+      mutating.value=true
+      try{
+        const key='exercise-'+Date.now()+'-'+Math.random().toString(36).slice(2,10)
+        await createExercise({name,category:part.key,muscleGroup,equipment},key)
+        await loadExercises(filters.value)
+        uni.showToast({title:'创建成功',icon:'success'})
+      }catch(error){showError(error,'动作创建失败')}
+      finally{mutating.value=false}
+    }})
+  }})
+  if(muscles.length===1){chooseEquipment(muscles[0][0]);return}
+  uni.showActionSheet({itemList:muscles.map(item=>item[1]),success:({tapIndex})=>chooseEquipment(muscles[tapIndex][0])})
+}
+function renameAction(action){
+  if(action.isSystem||!action.custom){uni.showToast({title:'系统动作不可编辑',icon:'none'});return}
+  uni.showModal({title:'编辑动作名称',editable:true,content:action.name,placeholderText:'请输入动作名称',success:async result=>{
+    if(!result.confirm)return
+    const name=String(result.content||'').trim()
+    if(!name){uni.showToast({title:'名称不能为空',icon:'none'});return}
+    mutating.value=true
+    try{await updateExercise(action.id,{name,version:action.version});await loadExercises(filters.value);uni.showToast({title:'修改成功',icon:'success'})}
+    catch(error){showError(error,'动作修改失败')}
+    finally{mutating.value=false}
+  }})
+}
+function removeAction(action){
+  if(action.isSystem||!action.custom){uni.showToast({title:'系统动作不可删除',icon:'none'});return}
+  uni.showModal({title:`删除“${action.name}”？`,content:'删除后该动作将不再出现在动作库中。',success:async result=>{
+    if(!result.confirm)return
+    mutating.value=true
+    try{await deleteExercise(action.id);await loadExercises(filters.value);uni.showToast({title:'已删除',icon:'success'})}
+    catch(error){showError(error,'动作删除失败')}
+    finally{mutating.value=false}
+  }})
+}
+function choosePartForAdd(){uni.showActionSheet({itemList:parts.map(part=>part.name),success:({tapIndex})=>scrollToPart(parts[tapIndex].key)})}
 onLoad(options=>{launchOptions.value=options||{}})
 onReady(()=>setTimeout(()=>{if(launchOptions.value.part){const name=decodeURIComponent(launchOptions.value.part),part=parts.find(item=>item.name===name||item.key===name);if(part)scrollToPart(part.key)}else if(launchOptions.value.mode==='add')choosePartForAdd()},220))
-onShow(syncTheme)
+onShow(()=>{syncTheme();loadExercises()})
 </script>
 
 <style scoped>
