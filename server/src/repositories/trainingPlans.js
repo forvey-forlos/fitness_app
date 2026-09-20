@@ -8,6 +8,7 @@ const planColumns = [
 
 const itemColumns = [
   'pe.id, pe.exercise_id, pe.sort_order, pe.sets, pe.reps, pe.weight,',
+  'pe.actual_sets, pe.actual_reps, pe.actual_weight,',
   'pe.rest_seconds, pe.notes,',
   "DATE_FORMAT(pe.created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS created_at,",
   "DATE_FORMAT(pe.updated_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS updated_at,",
@@ -42,15 +43,17 @@ async function inTransaction(pool, callback) {
 function createTrainingPlansRepository(pool) {
   async function insertItems(connection, planId, userId, items) {
     for (const item of items) {
+      const actual = item.actual || { kg: null, reps: null, sets: null }
       const [result] = await connection.execute(
         ['INSERT INTO training_plan_exercises',
           '(id, training_plan_id, exercise_id, sort_order, sets, reps, weight,',
-          'rest_seconds, notes, created_at, updated_at)',
-          'SELECT ?, p.id, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3)',
+          'actual_sets, actual_reps, actual_weight, rest_seconds, notes, created_at, updated_at)',
+          'SELECT ?, p.id, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3)',
           'FROM training_plans p WHERE p.id = ? AND p.user_id = ?',
           'AND p.status = ? AND p.deleted_at IS NULL'].join(' '),
         [item.id, item.exerciseId, item.sortOrder, item.sets, item.reps,
-          item.weight, item.restSeconds, item.notes, planId, userId, 'draft']
+          item.weight, actual.sets, actual.reps, actual.kg,
+          item.restSeconds, item.notes, planId, userId, 'draft']
       )
       if (result.affectedRows !== 1) throw new Error('Could not insert plan exercise')
     }

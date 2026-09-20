@@ -17,8 +17,8 @@ const date = '2026-09-18T00:00:00.000000Z'
 test('profile endpoints enforce auth, validation, version, and user isolation', async (t) => {
   const secret = randomBytes(48).toString('hex')
   const users = new Map([
-    [idA, { id: idA, username: 'Alice', username_normalized: 'alice', avatar_url: null, timezone: 'Asia/Shanghai' }],
-    [idB, { id: idB, username: 'Bob', username_normalized: 'bob', avatar_url: null, timezone: 'Asia/Shanghai' }]
+    [idA, { id: idA, display_name: 'Alice', account_code: '12345678', avatar_url: null, timezone: 'Asia/Shanghai' }],
+    [idB, { id: idB, display_name: 'Bob', account_code: '87654321', avatar_url: null, timezone: 'Asia/Shanghai' }]
   ])
   const profiles = new Map()
   const usersRepository = {
@@ -29,10 +29,7 @@ test('profile endpoints enforce auth, validation, version, and user isolation', 
     async updateProfile(id, changes) {
       const user = users.get(id)
       if (!user) return false
-      if (changes.username !== undefined) {
-        user.username = changes.username
-        user.username_normalized = changes.usernameNormalized
-      }
+      if (changes.displayName !== undefined) user.display_name = changes.displayName
       if (changes.avatarUrl !== undefined) user.avatar_url = changes.avatarUrl
       if (changes.timezone !== undefined) user.timezone = changes.timezone
       return true
@@ -160,17 +157,17 @@ test('profile endpoints enforce auth, validation, version, and user isolation', 
     assert.equal(profiles.get(idA).weight, 71.25)
   })
 
-  await t.test('profile changes normalize username and reject collisions', async () => {
+  await t.test('profile changes display name and permits duplicate nicknames', async () => {
     const updated = await request('PATCH', '/api/v1/users/me', idA, {
       username: 'NEWName', avatarUrl: 'https://example.com/a.png', timezone: 'UTC'
     })
     assert.equal(updated.status, 200)
     assert.equal(updated.result.data.username, 'NEWName')
-    assert.equal(users.get(idA).username_normalized, 'newname')
+    assert.equal(updated.result.data.displayName, 'NEWName')
     assert.equal(JSON.stringify(updated.result).includes('password_hash'), false)
     const duplicate = await request('PATCH', '/api/v1/users/me', idB, { username: 'newNAME' })
-    assert.equal(duplicate.status, 409)
-    assert.equal(duplicate.result.code, 'USERNAME_ALREADY_EXISTS')
+    assert.equal(duplicate.status, 200)
+    assert.equal(duplicate.result.data.displayName, 'newNAME')
     const invalid = await request('PATCH', '/api/v1/users/me', idA, { timezone: 'not-a-zone' })
     assert.equal(invalid.status, 400)
   })

@@ -52,7 +52,7 @@ function validateWrite(req, res, next, update = false) {
         return
       }
       for (const key of Object.keys(item)) {
-        if (!['exerciseId', 'sets', 'reps', 'weight', 'restSeconds', 'notes', 'sortOrder'].includes(key)) {
+        if (!['exerciseId', 'sets', 'reps', 'weight', 'actual', 'restSeconds', 'notes', 'sortOrder'].includes(key)) {
           errors.push({ field: prefix + '.' + key, message: '不支持的字段' })
         }
       }
@@ -71,6 +71,18 @@ function validateWrite(req, res, next, update = false) {
       }
       if (item.weight !== undefined && !validWeight(item.weight)) {
         errors.push({ field: prefix + '.weight', message: '重量须为 0–1000 kg，最多两位小数' })
+      }
+      if (item.actual !== undefined && item.actual !== null) {
+        if (typeof item.actual !== 'object' || Array.isArray(item.actual)) {
+          errors.push({ field: prefix + '.actual', message: '实际数据必须是对象或 null' })
+        } else {
+          for (const key of Object.keys(item.actual)) {
+            if (!['kg', 'reps', 'sets'].includes(key)) errors.push({ field: prefix + '.actual.' + key, message: '不支持的字段' })
+          }
+          if (item.actual.kg !== undefined && !validWeight(item.actual.kg)) errors.push({ field: prefix + '.actual.kg', message: '实际重量超出允许范围' })
+          if (item.actual.reps !== undefined && !validOptionalInteger(item.actual.reps, 1, 1000)) errors.push({ field: prefix + '.actual.reps', message: '实际次数超出允许范围' })
+          if (item.actual.sets !== undefined && !validOptionalInteger(item.actual.sets, 1, 100)) errors.push({ field: prefix + '.actual.sets', message: '实际组数超出允许范围' })
+        }
       }
       if (item.notes !== undefined && item.notes !== null &&
           (typeof item.notes !== 'string' || item.notes.length > 1000 ||
@@ -95,6 +107,9 @@ function validateWrite(req, res, next, update = false) {
       sets: item.sets ?? null,
       reps: item.reps ?? null,
       weight: item.weight ?? null,
+      actual: item.actual ? {
+        kg: item.actual.kg ?? null, reps: item.actual.reps ?? null, sets: item.actual.sets ?? null
+      } : { kg: null, reps: null, sets: null },
       restSeconds: item.restSeconds ?? null,
       notes: item.notes ?? null,
       sortOrder: item.sortOrder

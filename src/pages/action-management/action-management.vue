@@ -31,8 +31,8 @@
           <view v-if="groupActions(part.key).length" class="action-list">
             <view v-for="action in groupActions(part.key)" :key="action.id" class="action-row" hover-class="row-pressed">
               <view class="action-index">{{ action.name.slice(0,1) }}</view>
-              <view class="action-copy"><text class="action-name">{{ action.name }}</text><view class="action-meta"><text>{{ equipmentName(action.equipment) }}</text><text class="source" :class="{ custom: action.custom }">{{ action.custom ? '自定义' : '系统动作' }}</text></view></view>
-              <view v-if="action.custom" class="row-actions"><text class="edit" @tap="renameAction(action)">编辑</text><text class="remove" @tap="removeAction(action)">×</text></view>
+              <view class="action-copy"><text class="action-name">{{ action.name }}</text><view class="action-meta"><text>{{ equipmentName(action.equipment) }}</text><text class="source" :class="{ custom: isCustomAction(action) }">{{ isCustomAction(action) ? '自定义' : '系统动作' }}</text></view></view>
+              <view v-if="isCustomAction(action)" class="row-actions"><text class="edit" @tap.stop="renameAction(action)">编辑</text><text class="remove" @tap.stop="removeAction(action)">×</text></view>
               <view v-else class="row-actions"><text class="edit">只读</text></view>
             </view>
           </view>
@@ -100,6 +100,7 @@ const filterDescription=computed(()=>{
 })
 
 function groupActions(key){return actions.value.filter(item=>item.category===key)}
+function isCustomAction(action){return action?.custom===true||action?.isSystem===false}
 function equipmentName(value){return equipmentOptions.find(item=>item[0]===value)?.[1]||value||'其他'}
 function syncTheme(){const value=Number(uni.getStorageSync(THEME_STORAGE_KEY));if(Number.isInteger(value)&&value>=0&&value<themes.length)themeIndex.value=value}
 function goBack(){uni.navigateBack({fail:()=>uni.reLaunch({url:'/pages/home/home'})})}
@@ -167,7 +168,7 @@ function addCustom(part){
   uni.showActionSheet({itemList:muscles.map(item=>item[1]),success:({tapIndex})=>chooseEquipment(muscles[tapIndex][0])})
 }
 function renameAction(action){
-  if(action.isSystem||!action.custom){uni.showToast({title:'系统动作不可编辑',icon:'none'});return}
+  if(!isCustomAction(action)){uni.showToast({title:'系统动作不可编辑',icon:'none'});return}
   uni.showModal({title:'编辑动作名称',editable:true,content:action.name,placeholderText:'请输入动作名称',success:async result=>{
     if(!result.confirm)return
     const name=String(result.content||'').trim()
@@ -179,7 +180,7 @@ function renameAction(action){
   }})
 }
 function removeAction(action){
-  if(action.isSystem||!action.custom){uni.showToast({title:'系统动作不可删除',icon:'none'});return}
+  if(!isCustomAction(action)){uni.showToast({title:'系统动作不可删除',icon:'none'});return}
   uni.showModal({title:`删除“${action.name}”？`,content:'删除后该动作将不再出现在动作库中。',success:async result=>{
     if(!result.confirm)return
     mutating.value=true
@@ -190,7 +191,7 @@ function removeAction(action){
 }
 function choosePartForAdd(){uni.showActionSheet({itemList:parts.map(part=>part.name),success:({tapIndex})=>scrollToPart(parts[tapIndex].key)})}
 onLoad(options=>{launchOptions.value=options||{}})
-onReady(()=>setTimeout(()=>{if(launchOptions.value.part){const name=decodeURIComponent(launchOptions.value.part),part=parts.find(item=>item.name===name||item.key===name);if(part)scrollToPart(part.key)}else if(launchOptions.value.mode==='add')choosePartForAdd()},220))
+onReady(()=>setTimeout(()=>{if(launchOptions.value.part){const name=decodeURIComponent(launchOptions.value.part),part=parts.find(item=>item.name===name||item.key===name);if(part)scrollToPart(part.key)}},220))
 onShow(()=>{syncTheme();loadExercises()})
 </script>
 

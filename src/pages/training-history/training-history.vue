@@ -48,10 +48,10 @@ function formatDate(value){
   return y&&m&&d?`${y}年${Number(m)}月${Number(d)}日`:'日期未知'
 }
 function formatSnapshot(action){
-  const weight=action.weight===null||action.weight===undefined?'--':action.weight
-  const reps=action.reps===null||action.reps===undefined?'--':action.reps
-  const sets=action.sets===null||action.sets===undefined?'--':action.sets
-  return `${weight}kg · ${reps}个 · ${sets}组${action.notes?' · '+action.notes:''}`
+  const target=action.target||{kg:action.weight,reps:action.reps,sets:action.sets}
+  const actual=action.actual||{}
+  const value=(input,fallback='--')=>input===null||input===undefined?fallback:input
+  return `目标 ${value(target.kg)}kg/${value(target.reps)}个/${value(target.sets)}组 · 实际 ${value(actual.kg)}kg/${value(actual.reps)}个/${value(actual.sets)}组${action.notes?' · '+action.notes:''}`
 }
 async function loadHistory(query={}){
   const items=[],request={...query,page:1,pageSize:20}

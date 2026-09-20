@@ -8,6 +8,9 @@ const createBodyMeasurementsRoutes = require('./bodyMeasurements')
 const createExercisesRoutes = require('./exercises')
 const createTrainingSessionsRoutes = require('./trainingSessions')
 const createHomeRoutes = require('./home')
+const createWechatAuthRoutes = require('./wechatAuth')
+const createAvatarRoutes = require('./avatars')
+const createWechatBindingsRoutes = require('./wechatBindings')
 
 function createRoutes(services) {
   const router = Router()
@@ -20,13 +23,19 @@ function createRoutes(services) {
   const exerciseRoutes = createExercisesRoutes(services.exercisesService, services.authMiddleware)
   const trainingSessionsRoutes = createTrainingSessionsRoutes(services.trainingSessionsService, services.authMiddleware)
   const homeRoutes = createHomeRoutes(services.homeService, services.authMiddleware)
+  const wechatAuthRoutes = createWechatAuthRoutes(services.wechatAuthService)
+  const avatarRoutes = createAvatarRoutes(services.avatarService, services.authMiddleware)
+  const wechatBindingsRoutes = createWechatBindingsRoutes(services.wechatBindingsService, services.authMiddleware)
 
   router.use('/api/v1/auth', authRoutes)
+  router.use('/api/v1/auth', wechatAuthRoutes)
   router.use('/api/v1/users', usersRoutes)
+  router.use('/api/v1/users', wechatBindingsRoutes)
   router.use('/api/v1/body', bodyRoutes)
   router.use('/api/v1/body', bodyMeasurementRoutes)
   router.use('/api/v1/exercises', exerciseRoutes)
   router.use('/api/v1/home', homeRoutes)
+  router.use('/api/v1', avatarRoutes)
   router.use('/api/v1', healthRoutes.v1, trainingPlanRoutes.v1, trainingSessionsRoutes)
 
   // Temporary aliases for the existing frontend. Remove after it adopts /api/v1.

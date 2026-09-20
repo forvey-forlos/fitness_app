@@ -3,12 +3,12 @@ import { getCurrentUser as fetchCurrentUser } from './user'
 
 export { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY }
 
-export function register({ username, password, agreementVersion, privacyVersion, timezone = 'Asia/Shanghai' }) {
-  return request({ url: '/api/v1/auth/register', method: 'POST', auth: false, data: { username, password, agreementVersion, privacyVersion, timezone } })
+export function register({ displayName, password, agreementVersion, privacyVersion, timezone = 'Asia/Shanghai' }) {
+  return request({ url: '/api/v1/auth/register', method: 'POST', auth: false, data: { displayName, password, agreementVersion, privacyVersion, timezone } })
 }
 
-export function login({ username, password, deviceId, platform }) {
-  return request({ url: '/api/v1/auth/login', method: 'POST', auth: false, data: { username, password, deviceId, platform } })
+export function login({ accountCode, password, deviceId, platform }) {
+  return request({ url: '/api/v1/auth/login', method: 'POST', auth: false, data: { accountCode, password, deviceId, platform } })
 }
 
 export async function getCurrentUser() {
@@ -35,8 +35,8 @@ export function getCurrentAgreements(locale = 'zh-CN') {
   return request({ url: `/api/v1/agreements/current?locale=${encodeURIComponent(locale)}`, auth: false })
 }
 
-export function requestPasswordReset(username) {
-  return request({ url: '/api/v1/auth/password/forgot', method: 'POST', auth: false, data: { username } })
+export function requestPasswordReset(accountCode) {
+  return request({ url: '/api/v1/auth/password/forgot', method: 'POST', auth: false, data: { accountCode } })
 }
 
 export function resetPassword(resetToken, newPassword) {

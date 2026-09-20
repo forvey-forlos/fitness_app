@@ -20,7 +20,7 @@ function validateComplete(req, res, next) {
     return next(fail([{ field: 'body', message: '请求体必须是对象' }]))
   }
   for (const key of Object.keys(body)) {
-    if (!['version', 'startedAt', 'completedAt'].includes(key)) errors.push({ field: key, message: '不支持的字段' })
+    if (!['version', 'startedAt', 'completedAt', 'exercises'].includes(key)) errors.push({ field: key, message: '不支持的字段' })
   }
   if (!Number.isInteger(body.version) || body.version < 1 || body.version > 4294967294) {
     errors.push({ field: 'version', message: '必须提供有效版本号' })
@@ -31,13 +31,50 @@ function validateComplete(req, res, next) {
   if (timestamp(body.startedAt) && timestamp(body.completedAt) && Date.parse(body.startedAt) > Date.parse(body.completedAt)) {
     errors.push({ field: 'startedAt', message: '开始时间不能晚于完成时间' })
   }
+  if (!Array.isArray(body.exercises) || !body.exercises.length) {
+    errors.push({ field: 'exercises', message: '必须提供至少一个动作的实际完成数据' })
+  } else {
+    const seen = new Set()
+    body.exercises.forEach((item, index) => {
+      const field = `exercises[${index}]`
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        errors.push({ field, message: '必须是对象' }); return
+      }
+      for (const key of Object.keys(item)) {
+        if (!['exerciseId', 'actual'].includes(key)) errors.push({ field: `${field}.${key}`, message: '不支持的字段' })
+      }
+      if (!uuid.test(item.exerciseId || '')) errors.push({ field: `${field}.exerciseId`, message: 'ID 不合法' })
+      else if (seen.has(item.exerciseId)) errors.push({ field: `${field}.exerciseId`, message: '动作不能重复' })
+      else seen.add(item.exerciseId)
+      const actual = item.actual
+      if (!actual || typeof actual !== 'object' || Array.isArray(actual)) {
+        errors.push({ field: `${field}.actual`, message: '必须提供实际数据' }); return
+      }
+      for (const key of Object.keys(actual)) {
+        if (!['kg', 'reps', 'sets'].includes(key)) errors.push({ field: `${field}.actual.${key}`, message: '不支持的字段' })
+      }
+      if (typeof actual.kg !== 'number' || !Number.isFinite(actual.kg) || actual.kg < 0 || actual.kg > 1000) {
+        errors.push({ field: `${field}.actual.kg`, message: '必须为 0–1000 的数字' })
+      }
+      if (!Number.isInteger(actual.reps) || actual.reps < 1 || actual.reps > 1000) {
+        errors.push({ field: `${field}.actual.reps`, message: '必须为 1–1000 的整数' })
+      }
+      if (!Number.isInteger(actual.sets) || actual.sets < 1 || actual.sets > 100) {
+        errors.push({ field: `${field}.actual.sets`, message: '必须为 1–100 的整数' })
+      }
+    })
+  }
   const key = req.get('Idempotency-Key')
   if (!key || !/^[\x21-\x7E]{1,128}$/.test(key)) errors.push({ field: 'Idempotency-Key', message: '须提供 1–128 位可见 ASCII 幂等键' })
   if (errors.length) return next(fail(errors))
   req.validated = {
     version: body.version, idempotencyKey: key,
     startedAt: body.startedAt ? new Date(body.startedAt).toISOString() : null,
-    completedAt: body.completedAt ? new Date(body.completedAt).toISOString() : null
+    completedAt: body.completedAt ? new Date(body.completedAt).toISOString() : null,
+    exercises: Array.isArray(body.exercises) ? body.exercises.map((item) => ({
+      exerciseId: item.exerciseId,
+      actual: { kg: item.actual.kg, reps: item.actual.reps, sets: item.actual.sets }
+    })) : []
   }
   next()
 }

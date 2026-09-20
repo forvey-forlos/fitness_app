@@ -15,6 +15,14 @@ function presentSession(row) {
 }
 
 function presentExercise(row) {
+  const target = {
+    kg: row.weight === null ? null : Number(row.weight),
+    reps: row.reps, sets: row.sets
+  }
+  const actual = {
+    kg: row.actual_weight == null ? null : Number(row.actual_weight),
+    reps: row.actual_reps, sets: row.actual_sets
+  }
   return {
     id: row.id, exerciseId: row.exercise_id,
     exerciseNameSnapshot: row.exercise_name_snapshot,
@@ -22,7 +30,7 @@ function presentExercise(row) {
     muscleGroupSnapshot: row.muscle_group_snapshot,
     equipmentSnapshot: row.equipment_snapshot,
     sortOrder: row.sort_order, sets: row.sets, reps: row.reps,
-    weight: row.weight === null ? null : Number(row.weight),
+    weight: target.kg, target, actual,
     restSeconds: row.rest_seconds, notes: row.notes
   }
 }
@@ -66,7 +74,34 @@ function createTrainingSessionsService(options = {}) {
       const date = shiftDate(weekStart, index)
       return { date, weekday: index + 1, completed: byDate.has(date), recordId: byDate.get(date) || null }
     })
-    return { weekStart, weekEnd, completedCount: days.filter((day) => day.completed).length, days }
+    return {
+      weekStart, weekEnd, completedCount: days.filter((day) => day.completed).length,
+      currentStreak: await currentStreak(userId, timezone, localDate(now(), timezone)), days
+    }
+  }
+
+  async function currentStreak(userId, timezone, today) {
+    const beforeUtc = sqlUtc(startOfLocalDate(shiftDate(today, 1), timezone))
+    let cursor = null, expected = today, streak = 0, previousDate = null
+    for (;;) {
+      const rows = await repository.listRecentCompletions(userId, beforeUtc, cursor, 100)
+      if (!rows.length) return streak
+      for (const row of rows) {
+        const date = localDate(new Date(readUtc(row.completed_at)), timezone)
+        if (date === previousDate) continue
+        previousDate = date
+        if (streak === 0 && date !== expected) {
+          expected = shiftDate(expected, -1)
+          if (date !== expected) return 0
+        }
+        if (date !== expected) return streak
+        streak += 1
+        expected = shiftDate(expected, -1)
+      }
+      if (rows.length < 100) return streak
+      const last = rows.at(-1)
+      cursor = { completedAt: sqlUtc(last.completed_at), id: last.id }
+    }
   }
 
   async function replay(userId, planId, key, hash, prior, user) {
@@ -86,7 +121,7 @@ function createTrainingSessionsService(options = {}) {
       const user = await activeUser(userId)
       const hash = createHash('sha256').update(JSON.stringify({
         planId, version: input.version, startedAt: input.startedAt,
-        completedAt: input.completedAt
+        completedAt: input.completedAt, exercises: input.exercises
       })).digest('hex')
       const prior = await repository.findByKey(userId, input.idempotencyKey)
       if (prior) return replay(userId, planId, input.idempotencyKey, hash, prior, user)
@@ -112,6 +147,15 @@ function createTrainingSessionsService(options = {}) {
           if (!items.length) {
             throw new HttpError(422, 'BUSINESS_RULE_ERROR', '训练计划至少需要一个动作才能完成')
           }
+          const actualById = new Map(input.exercises.map((item) => [item.exerciseId, item.actual]))
+          if (actualById.size !== items.length || items.some((item) => !actualById.has(item.exercise_id))) {
+            throw new HttpError(422, 'PLAN_ACTION_INCOMPLETE', '实际数据必须与计划中的动作完全一致')
+          }
+          const snapshots = items.map((item) => {
+            const actual = actualById.get(item.exercise_id)
+            return { ...item, id: randomUUID(), actual_sets: actual.sets,
+              actual_reps: actual.reps, actual_weight: actual.kg }
+          })
           const planSnapshot = { ...plan }
           await tx.insertSession({
             id: recordId, userId, planId, planDate: plan.plan_date,
@@ -120,7 +164,7 @@ function createTrainingSessionsService(options = {}) {
             startedAt: startedAt ? sqlUtc(startedAt) : null,
             completedAt: sqlUtc(completedAt), key: input.idempotencyKey, hash
           })
-          await tx.insertExercises(recordId, items.map((item) => ({ ...item, id: randomUUID() })))
+          await tx.insertExercises(recordId, snapshots)
           if (!await tx.markCompleted(userId, planId, plan.version, sqlUtc(completedAt))) {
             throw new HttpError(409, 'PLAN_VERSION_CONFLICT', '训练计划版本冲突，请重新获取')
           }

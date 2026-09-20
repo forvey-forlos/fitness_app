@@ -27,7 +27,7 @@ CREATE TABLE exercises (
   KEY idx_exercises_system_filters (is_system, deleted_at, category, muscle_group, equipment),
   KEY idx_exercises_name_normalized (name_normalized),
   CONSTRAINT fk_exercises_owner FOREIGN KEY (owner_user_id)
-    REFERENCES users (id) ON DELETE CASCADE,
+    REFERENCES users (id) ON DELETE RESTRICT,
   CONSTRAINT chk_exercises_ownership CHECK (
     (is_system = 1 AND owner_user_id IS NULL) OR
     (is_system = 0 AND owner_user_id IS NOT NULL)

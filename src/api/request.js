@@ -158,3 +158,16 @@ async function sendRequest({ url, method = 'GET', data, header = {}, auth = true
 export function request(options = {}) {
   return sendRequest(options)
 }
+
+
+export async function uploadFile({url,filePath,name='file',formData={},timeout=30000}={},retried=false){
+  const token=uni.getStorageSync(ACCESS_TOKEN_KEY)
+  const response=await new Promise((resolve,reject)=>uni.uploadFile({url:joinUrl(url),filePath,name,formData,timeout,
+    header:token?{Authorization:`Bearer ${token}`}: {},success:resolve,fail:cause=>reject(new Error(cause?.errMsg||'文件上传失败'))}))
+  let body
+  try{body=typeof response.data==='string'?JSON.parse(response.data):response.data}catch{body=null}
+  if(response.statusCode>=200&&response.statusCode<300&&(body?.code===0||body?.code==='0'))return body.data
+  const error=new Error(body?.message||`上传失败（${response.statusCode}）`);error.statusCode=response.statusCode;error.code=body?.code||'UPLOAD_ERROR';error.requestId=body?.requestId||''
+  if(response.statusCode===401&&!retried&&token){try{await renewSession();return uploadFile({url,filePath,name,formData,timeout},true)}catch(refreshError){invalidateSession(token);throw refreshError}}
+  throw error
+}

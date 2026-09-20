@@ -14,13 +14,13 @@ const testSecret = randomBytes(48).toString('hex')
 const tokenConfig = { accessSecret: testSecret, accessTtl: 1800, refreshTtl: 2592000 }
 const savedTokens = []
 let currentUser
-let lookedUpUsername
+let lookedUpAccountCode
 let server
 let baseUrl
 
 const usersRepository = {
-  async findForLogin(normalized) {
-    lookedUpUsername = normalized
+  async findForLogin(accountCode) {
+    lookedUpAccountCode = accountCode
     return currentUser
   }
 }
@@ -38,7 +38,7 @@ const app = createApp({
 before(async () => {
   currentUser = {
     id: userId,
-    username: 'Fit健身',
+    display_name: 'Fit健身', account_code: '12345678',
     password_hash: await bcrypt.hash(password, 12),
     avatar_url: null,
     timezone: 'Asia/Shanghai',
@@ -66,15 +66,15 @@ async function login(payload) {
 
 test('valid login returns a signed JWT and an opaque refresh token', async () => {
   const { response, body } = await login({
-    username: 'FIT健身', password, deviceId: 'device-123', platform: 'mp-weixin'
+    accountCode: '12345678', password, deviceId: 'device-123', platform: 'mp-weixin'
   })
 
   assert.equal(response.status, 200)
   assert.equal(body.code, 0)
   assert.equal(body.requestId, response.headers.get('x-request-id'))
-  assert.equal(lookedUpUsername, 'fit健身')
+  assert.equal(lookedUpAccountCode, '12345678')
   assert.deepEqual(body.data.user, {
-    id: userId, username: 'Fit健身', avatarUrl: null, timezone: 'Asia/Shanghai'
+    id: userId, username: 'Fit健身', displayName: 'Fit健身', accountCode: '12345678', avatarUrl: null, timezone: 'Asia/Shanghai'
   })
   assert.equal(body.data.accessTokenExpiresIn, 1800)
   assert.equal(body.data.refreshTokenExpiresIn, 2592000)
@@ -103,9 +103,9 @@ test('valid login returns a signed JWT and an opaque refresh token', async () =>
 test('unknown user and wrong password have the same public error', async () => {
   const activeUser = currentUser
   currentUser = null
-  const unknown = await login({ username: 'Nobody', password })
+  const unknown = await login({ accountCode: '87654321', password })
   currentUser = activeUser
-  const wrong = await login({ username: 'Fit健身', password: 'Wrong@2026' })
+  const wrong = await login({ accountCode: '12345678', password: 'Wrong@2026' })
 
   for (const result of [unknown, wrong]) {
     assert.equal(result.response.status, 401)
@@ -118,16 +118,16 @@ test('unknown user and wrong password have the same public error', async () => {
 })
 
 test('invalid login parameters are rejected before user lookup', async () => {
-  lookedUpUsername = null
+  lookedUpAccountCode = null
   const { response, body } = await login({
-    username: 'bad_name', password: 'short', deviceId: 'device with spaces', platform: 'unknown'
+    accountCode: 'bad-code', password: 'short', deviceId: 'device with spaces', platform: 'unknown'
   })
 
   assert.equal(response.status, 400)
   assert.equal(body.code, 'VALIDATION_ERROR')
   assert.deepEqual(body.errors.map((error) => error.field),
-    ['username', 'password', 'deviceId', 'platform'])
-  assert.equal(lookedUpUsername, null)
+    ['accountCode', 'password', 'deviceId', 'platform'])
+  assert.equal(lookedUpAccountCode, null)
   assert.equal(savedTokens.length, 1)
 })
 
@@ -138,7 +138,7 @@ test('disabled and soft-deleted users cannot log in', async () => {
     { ...activeUser, deleted_at: new Date() }
   ]) {
     currentUser = changed
-    const { response, body } = await login({ username: 'Fit健身', password })
+    const { response, body } = await login({ accountCode: '12345678', password })
     assert.equal(response.status, 401)
     assert.equal(body.code, 'INVALID_CREDENTIALS')
   }
@@ -165,9 +165,8 @@ test('refresh-token repository inserts only a digest and null rotation state', a
   assert.equal(executed.parameters.includes(password), false)
 })
 
-test('login accepts digit usernames and the 30-character boundary', async () => {
-  const username = 'A'.repeat(29) + '9'
-  const { response } = await login({ username, password })
+test('login accepts the eight-digit account boundary', async () => {
+  const { response } = await login({ accountCode: '99999999', password })
   assert.equal(response.status, 200)
-  assert.equal(lookedUpUsername, 'a'.repeat(29) + '9')
+  assert.equal(lookedUpAccountCode, '99999999')
 })

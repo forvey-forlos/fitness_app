@@ -32,3 +32,17 @@ test('home training API adapter keeps an array and requests the chosen date', as
     delete globalThis.__trainingRequest
   }
 })
+
+test('training UI submits actual results, supports date changes, and does not reopen action-part picker', () => {
+  const root = path.resolve(__dirname, '../..')
+  const plan = readFileSync(path.join(root, 'src/pages/training-plan/training-plan.vue'), 'utf8')
+  const home = readFileSync(path.join(root, 'src/pages/home/home.vue'), 'utf8')
+  const library = readFileSync(path.join(root, 'src/pages/action-management/action-management.vue'), 'utf8')
+  assert.match(plan, /<picker mode="date"/)
+  assert.match(plan, /exercises:actualExercises/)
+  assert.match(plan, /请完整填写每个动作的实际数据/)
+  assert.doesNotMatch(home, /action-management\?mode=add/)
+  assert.doesNotMatch(library, /launchOptions\.value\.mode==='add'/)
+  assert.match(library, /@tap\.stop="renameAction\(action\)"/)
+  assert.match(library, /@tap\.stop="removeAction\(action\)"/)
+})

@@ -70,7 +70,9 @@ test('completion, immutable snapshots, idempotency, isolation, history and timez
               muscle_group_snapshot: item.muscle_group,
               equipment_snapshot: item.equipment,
               sort_order: item.sort_order, sets: item.sets, reps: item.reps,
-              weight: item.weight, rest_seconds: item.rest_seconds, notes: item.notes
+              weight: item.weight, actual_sets: item.actual_sets,
+              actual_reps: item.actual_reps, actual_weight: item.actual_weight,
+              rest_seconds: item.rest_seconds, notes: item.notes
             })))
           },
           async markCompleted(userId, id, version) {
@@ -108,6 +110,12 @@ test('completion, immutable snapshots, idempotency, isolation, history and timez
         r.completed_at >= start.replace(' ', 'T') + 'Z' &&
         r.completed_at < end.replace(' ', 'T') + 'Z')
         .map((r) => ({ id: r.id, completed_at: r.completed_at }))
+    },
+    async listRecentCompletions(userId, beforeUtc, cursor, limit) {
+      return [...records.values()].filter((r) => r.user_id === userId &&
+        r.completed_at < beforeUtc.replace(' ', 'T') + 'Z')
+        .sort((a, b) => b.completed_at.localeCompare(a.completed_at))
+        .slice(0, limit).map((r) => ({ id: r.id, completed_at: r.completed_at }))
     }
   }
   const service = createTrainingSessionsService({
@@ -127,6 +135,9 @@ test('completion, immutable snapshots, idempotency, isolation, history and timez
     server.close((error) => error ? reject(error) : resolve())))
   const base = 'http://127.0.0.1:' + server.address().port + '/api/v1'
   async function request(method, path, userId, body, key) {
+    if (method === 'POST' && path.includes('/complete') && body && body.exercises === undefined) {
+      body = { ...body, exercises: [{ exerciseId, actual: { kg: 42.5, reps: 9, sets: 4 } }] }
+    }
     const response = await fetch(base + path, {
       method,
       headers: {
@@ -160,6 +171,8 @@ test('completion, immutable snapshots, idempotency, isolation, history and timez
     assert.equal(first.body.data.plan.version, 3)
     recordId = first.body.data.trainingRecord.id
     assert.equal(first.body.data.trainingRecord.exercises[0].exerciseNameSnapshot, '杠铃卧推')
+    assert.deepEqual(first.body.data.trainingRecord.exercises[0].target, { kg: 40, reps: 10, sets: 4 })
+    assert.deepEqual(first.body.data.trainingRecord.exercises[0].actual, { kg: 42.5, reps: 9, sets: 4 })
     const retry = await request('POST', completePath, userA, {
       version: 2, completedAt: '2026-09-18T16:10:00.000Z'
     }, 'finish-1')
@@ -226,7 +239,8 @@ test('session repository rolls back if an exercise snapshot write fails', async 
     await tx.insertExercises(randomUUID(), [{
       id: randomUUID(), exercise_id: exerciseId, exercise_name: '动作',
       category: 'chest', muscle_group: 'chest', equipment: 'barbell',
-      sort_order: 1, sets: 1, reps: 1, weight: '1.00', rest_seconds: 0, notes: null
+      sort_order: 1, sets: 1, actual_sets: 2, reps: 1, actual_reps: 2,
+      weight: '1.00', actual_weight: 2, rest_seconds: 0, notes: null
     }])
   }), /snapshot insert failed/)
   assert.equal(rolledBack, true)

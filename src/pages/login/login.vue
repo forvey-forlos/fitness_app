@@ -25,10 +25,10 @@
       <text class="subtitle">登录后继续记录每一次进步</text>
 
       <view class="form-item">
-        <text class="label">用户名</text>
+        <text class="label">登录账号</text>
         <view class="input-box" :class="{ focused: focusField === 'username', invalid: errors.username }">
           <text class="input-icon">○</text>
-          <input v-model="username" class="input" maxlength="-1" placeholder="请输入数字、英文或汉字用户名" placeholder-class="placeholder" autocomplete="username" @focus="focusField='username'" @blur="validateUsername" @input="onUsernameInput" />
+          <input v-model="username" class="input" type="number" maxlength="8" placeholder="请输入注册时生成的 8 位账号" placeholder-class="placeholder" @focus="focusField='username'" @blur="validateUsername" @input="onUsernameInput" />
           <text v-if="username" class="clear" @tap="username=''">×</text>
         </view>
         <text v-if="errors.username" class="error">{{ errors.username }}</text>
@@ -71,6 +71,9 @@
       <button class="login-button" :class="{ loading }" :disabled="loading" hover-class="button-pressed" @tap="submit">
         <view v-if="loading" class="spinner" /><text v-else>登 录</text>
       </button>
+      <!-- #ifdef MP-WEIXIN -->
+      <button class="wechat-button" :disabled="loading" hover-class="button-pressed" @tap="submitWechat">微信账号快捷登录</button>
+      <!-- #endif -->
       <view class="safe-tip"><text class="shield">◇</text><text>你的账户信息将被安全保存</text></view>
     </view>
   </view>
@@ -80,7 +83,7 @@
 import { computed, reactive, ref, onMounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { ACCESS_TOKEN_KEY, clearSession, getCurrentUser, login, saveSession } from '../../api/auth'
-import { getUsernameError, sanitizeUsername } from '../../utils/username'
+import { loginWithWechat } from '../../api/wechatAuth'
 
 const STORAGE_KEY = 'fit_note_remembered_login'
 const THEME_STORAGE_KEY = 'fit_note_theme_index'
@@ -124,15 +127,15 @@ const strengthText = computed(() => passwordTypes.value >= 4 ? '强' : passwordT
 
 function onUsernameInput(event) {
   const original = event.detail.value
-  const result = sanitizeUsername(original)
+  const result = String(original).replace(/\D/g, '').slice(0, 8)
   username.value = result
-  errors.username = original !== result ? '仅支持数字、英文和汉字，最多 30 个字符' : ''
+  errors.username = original !== result ? '登录账号只能输入 8 位数字' : ''
   return result
 }
 
 function validateUsername() {
   focusField.value = ''
-  errors.username = getUsernameError(username.value)
+  errors.username = /^[1-9]\d{7}$/.test(username.value) ? '' : '请输入 8 位数字登录账号'
   return !errors.username
 }
 
@@ -178,9 +181,9 @@ async function submit() {
   if (!validateUsername() || !validatePassword() || errors.agreement) return
   loading.value = true
   try {
-    const session = await login({ username: username.value, password: password.value })
+    const session = await login({ accountCode: username.value, password: password.value })
     saveSession(session)
-    if (remember.value) uni.setStorageSync(STORAGE_KEY, { username: username.value })
+    if (remember.value) uni.setStorageSync(STORAGE_KEY, { accountCode: username.value })
     else uni.removeStorageSync(STORAGE_KEY)
     password.value = ''
     uni.showToast({ title: '登录成功', icon: 'success' })
@@ -188,6 +191,19 @@ async function submit() {
   } catch (error) {
     uni.showToast({ title: error.message || '登录失败，请稍后重试', icon: 'none' })
   } finally { loading.value = false }
+}
+async function submitWechat(){
+  errors.agreement=agreed.value?'':'请先阅读并同意用户协议与隐私政策'
+  if(errors.agreement||loading.value)return
+  loading.value=true
+  try{
+    const session=await loginWithWechat()
+    saveSession(session)
+    if(session.avatarConsentRequired){
+      uni.showModal({title:'使用微信头像？',content:'是否前往资料页选择并上传当前微信头像？你也可以稍后自主上传。',confirmText:'选择头像',cancelText:'暂不',success:result=>uni.reLaunch({url:result.confirm?'/pages/profile/profile?wechatAvatar=1':'/pages/home/home'})})
+    }else uni.reLaunch({url:'/pages/home/home'})
+  }catch(error){uni.showToast({title:error?.message||'微信登录失败',icon:'none'})}
+  finally{loading.value=false}
 }
 
 function syncStoredTheme() {
@@ -220,10 +236,12 @@ async function restoreSession() {
 onShow(syncStoredTheme)
 onMounted(() => {
   const saved = uni.getStorageSync(STORAGE_KEY)
-  if (saved && saved.username) {
-    username.value = saved.username
+  const pending=uni.getStorageSync('fit_note_pending_account_code')
+  if(pending){username.value=String(pending);uni.removeStorageSync('fit_note_pending_account_code')}
+  else if (saved && saved.accountCode) {
+    username.value = saved.accountCode
     remember.value = true
-    if (saved.password) uni.setStorageSync(STORAGE_KEY, { username: saved.username })
+    if (saved.password) uni.setStorageSync(STORAGE_KEY, { accountCode: saved.accountCode })
   }
   restoreSession()
 })
@@ -247,4 +265,5 @@ page{background:#f7f8fc}.page{transition:--accent .82s cubic-bezier(.3,.7,.15,1)
   .spectrum{position:absolute;left:3%;right:3%;height:110px;display:flex;align-items:flex-end;justify-content:space-between;gap:7px;opacity:.58}.spectrum-top{top:8%;transform:rotate(180deg)}.spectrum-bottom{bottom:1%}.frequency{flex:1;max-width:12px;height:var(--height);border-radius:8px;background:linear-gradient(to top,transparent,rgba(var(--glow-rgb),.35),var(--accent-2));transform-origin:bottom;will-change:transform;animation:frequency var(--duration) ease-in-out var(--delay) infinite alternate}@keyframes frequency{from{transform:scaleY(.18);opacity:.34}to{transform:scaleY(1);opacity:.92}}
   .music-caption{position:absolute;right:55px;top:47px;display:flex;align-items:center;gap:9px;color:rgba(255,255,255,.55);font-size:10px;letter-spacing:3px}.caption-dot{width:7px;height:7px;border-radius:50%;background:var(--accent-2);box-shadow:0 0 12px var(--accent-2);animation:beat .75s ease-in-out infinite alternate}@keyframes beat{to{transform:scale(1.8);opacity:.45}}
 }
+.wechat-button{height:88rpx;margin-top:18rpx;border:2rpx solid #55a66f;border-radius:27rpx;color:#278447;background:#f2fff6;font-size:25rpx;font-weight:700}.wechat-button:after{border:0}
 </style>

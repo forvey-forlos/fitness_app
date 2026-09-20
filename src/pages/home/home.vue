@@ -173,7 +173,7 @@ function showProfile(){uni.navigateTo({url:'/pages/profile/profile'})}
 function editBodyData(){uni.navigateTo({url:'/pages/body-data/body-data'})}
 function openTrainingPlan(){uni.navigateTo({url:'/pages/training-plan/training-plan'})}
 function openTrainingHistory(){uni.navigateTo({url:'/pages/training-history/training-history'})}
-function addAction(){uni.navigateTo({url:'/pages/action-management/action-management?mode=add'})}
+function addAction(){uni.navigateTo({url:'/pages/action-management/action-management'})}
 function openPart(name){notice(`${name}动作列表将在后续开放`)}
 function openLibrary(){uni.navigateTo({url:'/pages/action-management/action-management'})}
 watch([trendSeries,themeIndex],()=>nextTick(drawWeightChart),{deep:true})

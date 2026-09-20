@@ -1,15 +1,16 @@
 const { HttpError } = require('../utils/response')
 
-const USERNAME_PATTERN = /^[A-Za-z0-9\p{Script=Han}]+$/u
+const DISPLAY_NAME_PATTERN = /^[A-Za-z0-9\p{Script=Han}]+$/u
+const ACCOUNT_CODE_PATTERN = /^[1-9]\d{7}$/
 const PASSWORD_PATTERN = /^[\x21-\x7E]{8,16}$/
 
 function normalizeUsername(username) {
   return username.replace(/[A-Z]/g, (letter) => letter.toLowerCase())
 }
 
-function isValidUsername(username) {
-  return typeof username === 'string' && USERNAME_PATTERN.test(username) &&
-    Array.from(username).length >= 1 && Array.from(username).length <= 30
+function isValidDisplayName(displayName) {
+  return typeof displayName === 'string' && DISPLAY_NAME_PATTERN.test(displayName) &&
+    Array.from(displayName).length >= 1 && Array.from(displayName).length <= 30
 }
 
 function isValidTimezone(timezone) {
@@ -25,11 +26,12 @@ function isValidTimezone(timezone) {
 function validateRegister(req, res, next) {
   const body = req.body || {}
   const errors = []
-  const { username, password } = body
+  const displayName = body.displayName === undefined ? body.username : body.displayName
+  const { password } = body
   const timezone = body.timezone === undefined ? 'Asia/Shanghai' : body.timezone
 
-  if (!isValidUsername(username)) {
-    errors.push({ field: 'username', message: '用户名只能包含数字、英文或汉字，且不能超过 30 个字符' })
+  if (!isValidDisplayName(displayName)) {
+    errors.push({ field: 'displayName', message: '昵称只能包含数字、英文或汉字，且不能超过 30 个字符' })
   }
 
   if (typeof password !== 'string' || !PASSWORD_PATTERN.test(password)) {
@@ -50,19 +52,19 @@ function validateRegister(req, res, next) {
     return next(new HttpError(400, 'VALIDATION_ERROR', '请求参数不合法', errors))
   }
 
-  req.validated = { username, usernameNormalized: normalizeUsername(username), password, timezone }
+  req.validated = { displayName, password, timezone }
   next()
 }
 
 function validateLogin(req, res, next) {
   const body = req.body || {}
   const errors = []
-  const { username, password } = body
+  const { accountCode, password } = body
   const deviceId = body.deviceId === undefined ? null : body.deviceId
   const platform = body.platform === undefined ? null : body.platform
 
-  if (!isValidUsername(username)) {
-    errors.push({ field: 'username', message: '用户名不合法' })
+  if (typeof accountCode !== 'string' || !ACCOUNT_CODE_PATTERN.test(accountCode)) {
+    errors.push({ field: 'accountCode', message: '登录账号必须是 8 位数字' })
   }
   if (typeof password !== 'string' || !PASSWORD_PATTERN.test(password)) {
     errors.push({ field: 'password', message: '密码格式不合法' })
@@ -79,7 +81,7 @@ function validateLogin(req, res, next) {
     return next(new HttpError(400, 'VALIDATION_ERROR', '请求参数不合法', errors))
   }
 
-  req.validated = { usernameNormalized: normalizeUsername(username), password, deviceId, platform }
+  req.validated = { accountCode, password, deviceId, platform }
   next()
 }
 
@@ -115,4 +117,5 @@ function validateLogout(req, res, next) {
   validateRefreshTokenBody(req, next, { logout: true })
 }
 
-module.exports = { validateRegister, validateLogin, validateRefresh, validateLogout, normalizeUsername, isValidUsername, isValidTimezone }
+module.exports = { validateRegister, validateLogin, validateRefresh, validateLogout, normalizeUsername,
+  isValidUsername: isValidDisplayName, isValidDisplayName, isValidTimezone }

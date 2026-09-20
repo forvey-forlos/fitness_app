@@ -198,7 +198,7 @@ X-Timezone: Asia/Shanghai
 
 ```json
 {
-  "username": "健身达人Fit",
+  "displayName": "健身达人Fit",
   "password": "Fit@2026ab",
   "agreementVersion": "user-2026-09",
   "privacyVersion": "privacy-2026-09",
@@ -208,9 +208,9 @@ X-Timezone: Asia/Shanghai
 
 校验规则：
 
-- 用户名只允许数字 `0–9`、英文字母 `A–Z/a–z` 和 Unicode Han（汉字）字符，不允许空格、下划线或其他符号。
-- 用户名长度为 1–30 个 Unicode 字符，按字符数而非 UTF-8 字节数计算。前后端均按 Unicode 码点统计；数据库使用 `CHAR_LENGTH(username)` 约束。
-- 用户名是否区分英文大小写必须统一；建议查重时不区分大小写，展示时保留原始大小写。
+- 昵称只允许数字 `0–9`、英文字母 `A–Z/a–z` 和 Unicode Han（汉字）字符，长度 1–30 个 Unicode 字符。
+- 昵称是展示资料，允许重复且可以通过用户资料接口自由修改，不作为登录凭据。
+- 注册时服务端生成全局唯一、不可修改的 8 位数字 `accountCode`；唯一性由数据库约束最终保证。
 - 密码只允许 ASCII 可见字符 `0x21–0x7E`，长度 8–16。
 - 密码必须至少包含数字、大写字母、小写字母、特殊字符四类中的两类。
 - 密码使用 Argon2id 或 bcrypt 哈希，禁止明文存储和日志记录。
@@ -226,19 +226,18 @@ X-Timezone: Asia/Shanghai
     "user": {
       "id": "usr_01K...",
       "username": "健身达人Fit",
+      "displayName": "健身达人Fit",
+      "accountCode": "12345678",
       "avatarUrl": null,
-      "createdAt": "2026-09-15T03:20:30.000Z"
-    },
-    "accessToken": "eyJ...",
-    "accessTokenExpiresIn": 1800,
-    "refreshToken": "rt_...",
-    "refreshTokenExpiresIn": 2592000
+      "timezone": "Asia/Shanghai",
+      "status": "active"
+    }
   },
   "requestId": "req_01K..."
 }
 ```
 
-冲突：用户名存在时返回 HTTP 409，`code=USERNAME_ALREADY_EXISTS`。
+不同用户可以使用相同昵称；`accountCode` 冲突由服务端重新生成，客户端无需处理。
 
 ### 5.2 登录
 
@@ -246,21 +245,21 @@ X-Timezone: Asia/Shanghai
 
 ```json
 {
-  "username": "健身达人Fit",
+  "accountCode": "12345678",
   "password": "Fit@2026ab",
   "deviceId": "client-generated-device-id",
   "platform": "mp-weixin"
 }
 ```
 
-响应与注册相同。账号或密码错误统一返回 `INVALID_CREDENTIALS`，不要暴露用户名是否存在。
+响应中的 `user` 字段与注册一致，并额外返回 `accessToken`、`accessTokenExpiresIn`、`refreshToken`、`refreshTokenExpiresIn`。账号或密码错误统一返回 `INVALID_CREDENTIALS`，不要暴露账号是否存在。
 
 安全要求：
 
 - 登录接口按 IP、设备和账号限流。
 - 连续失败达到阈值后启用短期冻结或验证码。
 - 前端“记住账户和密码”必须调整为“记住账户/保持登录”。
-- 禁止继续将密码写入 `fit_note_login`；本地只保存用户名和安全存储中的 Refresh Token。
+- 禁止继续将密码写入 `fit_note_login`；本地只保存 `accountCode` 和安全存储中的 Refresh Token。
 
 ### 5.3 刷新令牌
 
@@ -287,7 +286,7 @@ X-Timezone: Asia/Shanghai
 `POST /auth/password/forgot`
 
 ```json
-{ "username": "健身达人Fit" }
+{ "accountCode": "12345678" }
 ```
 
 无论账号是否存在都返回相同提示。由于当前注册页没有手机号/邮箱，正式启用找回密码前必须增加至少一种可验证的恢复渠道；微信小程序也可绑定微信身份作为辅助恢复方式。
@@ -337,6 +336,8 @@ X-Timezone: Asia/Shanghai
   "data": {
     "id": "usr_01K...",
     "username": "健身达人Fit",
+    "displayName": "健身达人Fit",
+    "accountCode": "12345678",
     "avatarUrl": null,
     "timezone": "Asia/Shanghai",
     "createdAt": "2026-09-15T03:20:30.000Z",
@@ -346,9 +347,17 @@ X-Timezone: Asia/Shanghai
 }
 ```
 
-`PATCH /users/me` 可修改用户名、头像和时区，用户名校验与注册一致。
+`PATCH /users/me` 可修改 `displayName`、头像和时区；`accountCode` 不允许修改。响应中的 `username` 暂作为 `displayName` 的兼容别名。
 
-### 6.2 主题偏好
+### 6.2 微信身份绑定
+
+- `GET /users/me/identities/wechat`：查询当前小程序 AppID 下的绑定状态。
+- `POST /users/me/identities/wechat`：请求体 `{ "code": "wx.login code" }`，将当前微信 OpenID 绑定到已登录用户。
+- `DELETE /users/me/identities/wechat`：解除绑定；微信是唯一登录方式时拒绝解绑。
+
+`POST /auth/wechat` 使用一次性 `wx.login` code 登录；OpenID 只保存在服务端，不返回前端。微信新用户仍获得 UUID 和唯一 `accountCode`，其默认昵称可与其他用户重复。
+
+### 6.3 主题偏好
 
 `GET /users/me/preferences`、`PATCH /users/me/preferences`
 

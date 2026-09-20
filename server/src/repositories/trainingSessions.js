@@ -10,7 +10,7 @@ const sessionColumns = [
 const exerciseColumns = [
   'id, exercise_id, exercise_name_snapshot, category_snapshot,',
   'muscle_group_snapshot, equipment_snapshot, sort_order, sets, reps,',
-  'weight, rest_seconds, notes'
+  'weight, actual_sets, actual_reps, actual_weight, rest_seconds, notes'
 ].join(' ')
 
 function createTrainingSessionsRepository(pool) {
@@ -76,12 +76,13 @@ function createTrainingSessionsRepository(pool) {
               await connection.execute(
                 ['INSERT INTO training_session_exercises',
                   '(id, session_id, exercise_id, exercise_name_snapshot, category_snapshot,',
-                  'muscle_group_snapshot, equipment_snapshot, sort_order, sets, reps,',
-                  'weight, rest_seconds, notes, created_at)',
-                  'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(3))'].join(' '),
+                  'muscle_group_snapshot, equipment_snapshot, sort_order, sets, actual_sets, reps, actual_reps,',
+                  'weight, actual_weight, rest_seconds, notes, created_at)',
+                  'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(3))'].join(' '),
                 [item.id, sessionId, item.exercise_id, item.exercise_name,
                   item.category, item.muscle_group, item.equipment, item.sort_order,
-                  item.sets, item.reps, item.weight, item.rest_seconds, item.notes]
+                  item.sets, item.actual_sets, item.reps, item.actual_reps,
+                  item.weight, item.actual_weight, item.rest_seconds, item.notes]
               )
             }
           },

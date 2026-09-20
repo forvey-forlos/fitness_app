@@ -1,5 +1,5 @@
 const { HttpError } = require('../utils/response')
-const { localDate, shiftDate, startOfLocalDate, sqlUtc } = require('../utils/bodyTime')
+const { localDate, shiftDate } = require('../utils/bodyTime')
 const { presentBodyProfile } = require('./bodyProfiles')
 const { createBodyMeasurementsService, presentBodyMeasurement } = require('./bodyMeasurements')
 const { presentTrainingPlan, presentTrainingPlanExercise } = require('./trainingPlans')
@@ -42,33 +42,6 @@ function createHomeService(options = {}) {
   const sessionsService = options.trainingSessionsService ||
     createTrainingSessionsService({ trainingSessionsRepository: sessionsRepository, usersRepository, now })
 
-  async function currentStreak(userId, timezone, today) {
-    const beforeUtc = sqlUtc(startOfLocalDate(shiftDate(today, 1), timezone))
-    let cursor = null
-    let expected = today
-    let streak = 0
-    let previousDate = null
-    for (;;) {
-      const rows = await sessionsRepository.listRecentCompletions(userId, beforeUtc, cursor, 100)
-      if (!rows.length) return streak
-      for (const row of rows) {
-        const date = localDate(new Date(row.completed_at), timezone)
-        if (date === previousDate) continue
-        previousDate = date
-        if (streak === 0 && date !== expected) {
-          expected = shiftDate(expected, -1)
-          if (date !== expected) return 0
-        }
-        if (date !== expected) return streak
-        streak += 1
-        expected = shiftDate(expected, -1)
-      }
-      if (rows.length < 100) return streak
-      const last = rows.at(-1)
-      cursor = { completedAt: sqlUtc(last.completed_at), id: last.id }
-    }
-  }
-
   return {
     async summary(userId, query = {}) {
       const user = await usersRepository.findActiveById(userId)
@@ -79,14 +52,13 @@ function createHomeService(options = {}) {
       }
       const date = query.date || localDate(now(), timezone)
       const [profileRow, latestRow, weightTrendSummary, planRow, weekTraining,
-        exerciseLibrary, streak] = await Promise.all([
+        exerciseLibrary] = await Promise.all([
         profilesRepository.findByUserId(userId),
         measurementsRepository.findLatestByUserId(userId),
         measurementsService.weightTrendForUser(userId, user, 'week'),
         plansRepository.findByDate(userId, date),
         sessionsService.weeklyForUser(userId, user, mondayOf(date)),
-        exercisesRepository.countVisibleByCategory(userId).then(librarySummary),
-        currentStreak(userId, timezone, date)
+        exercisesRepository.countVisibleByCategory(userId).then(librarySummary)
       ])
       const todayPlan = planRow
         ? {
@@ -111,11 +83,13 @@ function createHomeService(options = {}) {
         height, weight, bmi, lastWeightChange: weightTrendSummary.change,
         latestMeasuredAt: latestMeasurement?.measuredAt ?? null
       }
-      const safeUser = {
-        id: user.id, username: user.username,
-        avatarUrl: user.avatar_url, timezone
-      }
-      const week = { ...weekTraining, currentStreak: streak }
+      const displayName = user.display_name ?? user.username
+      const safeUser = { id: user.id, username: displayName,
+        ...(user.display_name !== undefined ? { displayName } : {}),
+        ...(user.account_code !== undefined ? { accountCode: user.account_code } : {}),
+        avatarUrl: user.avatar_url, timezone }
+      const week = { ...weekTraining }
+      const streak = week.currentStreak || 0
       return {
         user: safeUser, streakDays: streak, body, todayPlan,
         weekTraining: week, weeklyTraining: week,

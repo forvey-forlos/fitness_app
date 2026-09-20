@@ -22,11 +22,15 @@ function summary(row) {
 }
 
 function presentItem(row) {
+  const actual = {
+    kg: row.actual_weight == null ? null : Number(row.actual_weight),
+    reps: row.actual_reps, sets: row.actual_sets
+  }
   return {
     id: row.id, exerciseId: row.exercise_id, sortOrder: row.sort_order,
     sets: row.sets, reps: row.reps,
     weight: row.weight === null ? null : Number(row.weight),
-    restSeconds: row.rest_seconds, notes: row.notes,
+    actual, restSeconds: row.rest_seconds, notes: row.notes,
     createdAt: iso(row.created_at), updatedAt: iso(row.updated_at),
     exercise: {
       id: row.exercise_id, name: row.exercise_name,

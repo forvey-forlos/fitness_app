@@ -91,6 +91,8 @@ test('training plan API creates, filters, updates and isolates draft plans', asy
       planItems.set(record.id, items.map((item) => ({
         id: item.id, exercise_id: item.exerciseId, sort_order: item.sortOrder,
         sets: item.sets, reps: item.reps, weight: item.weight,
+        actual_sets: item.actual?.sets ?? null, actual_reps: item.actual?.reps ?? null,
+        actual_weight: item.actual?.kg ?? null,
         rest_seconds: item.restSeconds, notes: item.notes,
         created_at: stamp, updated_at: stamp, deleted_at: null
       })))
@@ -114,6 +116,8 @@ test('training plan API creates, filters, updates and isolates draft plans', asy
       planItems.get(id).push(...items.map((item) => ({
         id: item.id, exercise_id: item.exerciseId, sort_order: item.sortOrder,
         sets: item.sets, reps: item.reps, weight: item.weight,
+        actual_sets: item.actual?.sets ?? null, actual_reps: item.actual?.reps ?? null,
+        actual_weight: item.actual?.kg ?? null,
         rest_seconds: item.restSeconds, notes: item.notes,
         created_at: stamp, updated_at: stamp, deleted_at: null
       })))
@@ -266,12 +270,13 @@ test('training plan API creates, filters, updates and isolates draft plans', asy
     assert.equal(denied.status, 404)
     const updated = await request('PUT', '/' + planId, userA, {
       version: 1, planDate: '2026-09-18', name: '我的今日计划',
-      durationMinutes: 35, exercises: [abs]
+      durationMinutes: 35, exercises: [{...abs,actual:{kg:12.5,reps:8,sets:4}}]
     })
     assert.equal(updated.status, 200)
     assert.equal(updated.result.data.version, 2)
     assert.equal(updated.result.data.name, '我的今日计划')
     assert.equal(updated.result.data.exercises.length, 1)
+    assert.deepEqual(updated.result.data.exercises[0].actual,{kg:12.5,reps:8,sets:4})
     assert.equal(planItems.get(planId).filter((item) => !item.deleted_at).length, 1)
     const stale = await request('PUT', '/' + planId, userA, {
       version: 1, planDate: '2026-09-18', exercises: []

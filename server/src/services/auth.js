@@ -1,55 +1,45 @@
 const { randomUUID } = require('node:crypto')
 const { HttpError } = require('../utils/response')
 
-function usernameExistsError() {
-  return new HttpError(409, 'USERNAME_ALREADY_EXISTS', '用户名已被注册')
-}
-
 function invalidCredentialsError() {
-  return new HttpError(401, 'INVALID_CREDENTIALS', '用户名或密码错误')
+  return new HttpError(401, 'INVALID_CREDENTIALS', '账号或密码错误')
 }
 
 function createAuthService(options = {}) {
   const usersRepository = options.usersRepository || require('../repositories/users')
   const passwordHasher = options.passwordHasher || require('../utils/password')
   const createId = options.createId || randomUUID
+  const accountCodes = options.accountCodes || require('../utils/accountCode')
 
   return {
-    async register({ username, usernameNormalized, password, timezone }) {
-      const existing = await usersRepository.findByNormalizedUsername(usernameNormalized)
-      if (existing) throw usernameExistsError()
-
-      const user = {
-        id: createId(),
-        username,
-        usernameNormalized,
-        passwordHash: await passwordHasher.hashPassword(password),
-        timezone,
-        status: 'active'
-      }
-
-      try {
-        await usersRepository.create(user)
-      } catch (error) {
-        // The unique index is the final guard against simultaneous registrations.
-        if (error.code === 'ER_DUP_ENTRY' &&
-            error.sqlMessage?.includes('uq_users_username_normalized')) {
-          throw usernameExistsError()
+    async register({ displayName, password, timezone }) {
+      const id = createId()
+      const username = accountCodes.createInternalUsername(id)
+      const user = { id, displayName, username, usernameNormalized: username,
+        passwordHash: await passwordHasher.hashPassword(password), timezone, status: 'active' }
+      let created = false
+      for (let attempt = 0; attempt < 20 && !created; attempt += 1) {
+        user.accountCode = accountCodes.createAccountCode()
+        try { await usersRepository.create(user); created = true }
+        catch (error) {
+          if (error.code !== 'ER_DUP_ENTRY' || !error.sqlMessage?.includes('uq_users_account_code')) throw error
         }
-        throw error
       }
+      if (!created) throw new HttpError(503, 'ACCOUNT_CODE_UNAVAILABLE', '暂时无法分配账号，请稍后重试')
 
       return {
         id: user.id,
-        username: user.username,
+        username: user.displayName,
+        displayName: user.displayName,
+        accountCode: user.accountCode,
         avatarUrl: null,
         timezone: user.timezone,
         status: user.status
       }
     },
 
-    async login({ usernameNormalized, password, deviceId, platform }) {
-      const user = await usersRepository.findForLogin(usernameNormalized)
+    async login({ accountCode, password, deviceId, platform }) {
+      const user = await usersRepository.findForLogin(accountCode)
       const eligible = Boolean(user && user.status === 'active' && user.deleted_at === null)
       const validPassword = await passwordHasher.verifyPassword(
         password, eligible ? user.password_hash : null
@@ -77,7 +67,9 @@ function createAuthService(options = {}) {
       return {
         user: {
           id: user.id,
-          username: user.username,
+          username: user.display_name,
+          displayName: user.display_name,
+          accountCode: user.account_code,
           avatarUrl: user.avatar_url,
           timezone: user.timezone
         },

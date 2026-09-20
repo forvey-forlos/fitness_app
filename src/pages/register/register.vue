@@ -23,13 +23,13 @@
       <text class="subtitle">创建账户，记录每一次突破</text>
 
       <view class="form-item">
-        <text class="label">用户名</text>
+        <text class="label">昵称</text>
         <view class="input-box" :class="{ focused: focusField==='username', invalid: errors.username }">
           <text class="input-icon">○</text>
-          <input v-model="username" class="input" maxlength="-1" placeholder="请输入用户名" placeholder-class="placeholder" @focus="focusField='username'" @blur="validateUsername" @input="onUsernameInput" />
+          <input v-model="username" class="input" maxlength="-1" placeholder="请输入昵称" placeholder-class="placeholder" @focus="focusField='username'" @blur="validateUsername" @input="onUsernameInput" />
           <text v-if="username" class="clear" @tap="username=''">×</text>
         </view>
-        <text class="hint" :class="{ error: errors.username }">{{ errors.username || '支持数字、英文和汉字，最多 30 个字符' }}</text>
+        <text class="hint" :class="{ error: errors.username }">{{ errors.username || '昵称可以重复，注册后可自由修改' }}</text>
       </view>
 
       <view class="form-item">
@@ -99,11 +99,13 @@ async function submit(){
   if(!validateUsername()||!validatePassword()||!validateConfirm())return
   loading.value=true
   try{
-    await register({username:username.value,password:password.value})
+    const result=await register({displayName:username.value,password:password.value})
+    const accountCode=result?.user?.accountCode
+    if(!accountCode)throw new Error('注册响应缺少登录账号')
+    uni.setStorageSync('fit_note_pending_account_code',accountCode)
     password.value=''
     confirmPassword.value=''
-    uni.showToast({title:'账户创建成功，请登录',icon:'success'})
-    setTimeout(()=>uni.reLaunch({url:'/pages/login/login'}),900)
+    uni.showModal({title:'账户创建成功',content:`你的登录账号是 ${accountCode}\n请妥善保存，登录时需使用该账号。`,showCancel:false,confirmText:'复制并登录',success:()=>uni.setClipboardData({data:accountCode,complete:()=>uni.reLaunch({url:'/pages/login/login'})})})
   }catch(error){
     uni.showToast({title:error.message||'注册失败，请稍后重试',icon:'none'})
   }finally{loading.value=false}

@@ -1,6 +1,6 @@
 # Authentication schema migrations
 
-These eight files target MySQL 8. Run them **once**, in numeric order, against the
+These twelve files target MySQL 8. Run them **once**, in numeric order, against the
 intended database. The first two create `users` and `refresh_tokens`; the third
 replaces the original username length constraint. No accounts,
 tokens, or API endpoints are created. MySQL DDL commits implicitly, so take a
@@ -148,4 +148,21 @@ transaction locks the plan, copies snapshot fields, inserts the history
 and child rows, and updates the plan status/version/completed_at. History
 timestamps are UTC; list date filters and weekly aggregation use the user's
 saved timezone. The current completion API freezes planned exercise parameters;
-recording actual sets/reps/weight and editing history remain future work.
+`009_add_actual_training_results.sql` separates completed actual sets/reps/weight
+from the immutable plan target snapshot stored in training history.
+
+## WeChat identity, avatars, and account/display-name split (010–012)
+
+Run 010, 011, and 012 after 009. Migration 010 creates the WeChat OpenID binding
+table, 011 stores user-uploaded avatar bytes, and 012 adds the immutable unique
+eight-digit `account_code` plus the non-unique editable `display_name`. Migration
+012 backfills existing users in deterministic creation order, and makes
+`password_hash` nullable so WeChat-only accounts do not need a fabricated password.
+The legacy `username` columns remain as internal compatibility identifiers.
+
+    mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p "$DB_NAME" < server/migrations/010_create_wechat_accounts.sql
+    mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p "$DB_NAME" < server/migrations/011_create_user_avatars.sql
+    mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p "$DB_NAME" < server/migrations/012_decouple_account_code_and_display_name.sql
+
+Verify with `SHOW CREATE TABLE users`, `SHOW CREATE TABLE wechat_accounts`, and
+`SHOW CREATE TABLE user_avatars`. Do not rerun 012 after it succeeds.
