@@ -2,7 +2,13 @@ const { createHash, randomUUID } = require('node:crypto')
 const { HttpError } = require('../utils/response')
 const { groupCategory } = require('../validators/exercises')
 
+function readArray(value,fallback=[]){
+  if(Array.isArray(value))return value
+  if(typeof value==='string'){try{const parsed=JSON.parse(value);if(Array.isArray(parsed))return parsed}catch(_){}}
+  return fallback
+}
 function present(row) {
+  const legacyPart=row.category==='abs'?'core':row.category
   return {
     id: row.id,
     name: row.name,
@@ -10,6 +16,12 @@ function present(row) {
     bodyPart: row.category,
     muscleGroup: row.muscle_group,
     equipment: row.equipment,
+    bodyParts: readArray(row.body_parts,[legacyPart]),
+    recordMethods: readArray(row.record_methods,['weight','reps']),
+    primaryMuscles: readArray(row.primary_muscles,[row.muscle_group]),
+    secondaryMuscles: readArray(row.secondary_muscles,[]),
+    variants: readArray(row.variants,[]),
+    sortOrder: Number(row.sort_order||0),
     isSystem: Boolean(row.is_system),
     custom: !Boolean(row.is_system),
     version: row.version,
@@ -63,7 +75,13 @@ function createExercisesService(options = {}) {
       const payload = {
         name: input.name, nameNormalized: input.nameNormalized,
         category: input.category, muscleGroup: input.muscleGroup,
-        equipment: input.equipment
+        equipment: input.equipment,
+        bodyParts: input.bodyParts || [input.category === 'abs' ? 'core' : input.category],
+        recordMethods: input.recordMethods || ['weight', 'reps'],
+        primaryMuscles: input.primaryMuscles || [input.muscleGroup],
+        secondaryMuscles: input.secondaryMuscles || [],
+        variants: input.variants || [],
+        sortOrder: input.sortOrder || 0
       }
       const requestHash = createHash('sha256').update(JSON.stringify(payload)).digest('hex')
       if (input.idempotencyKey) {
@@ -104,7 +122,7 @@ function createExercisesService(options = {}) {
       const current = await requireEditable(userId, id)
       const category = input.category || current.category
       const muscleGroup = input.muscleGroup || current.muscle_group
-      if (groupCategory[muscleGroup] !== category) {
+      if (!input.bodyParts && groupCategory[muscleGroup] !== category) {
         throw new HttpError(400, 'VALIDATION_ERROR', '目标肌群与训练部位不匹配', [
           { field: 'muscleGroup', message: '目标肌群与训练部位不匹配' }
         ])

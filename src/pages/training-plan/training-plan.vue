@@ -80,11 +80,14 @@
 import { computed,ref } from 'vue'
 import { onLoad,onShow } from '@dcloudio/uni-app'
 import { getExercises } from '../../api/exercises'
+import { USER_KEY } from '../../api/auth'
 import {
   completeTrainingPlan, createTrainingPlan, deleteTrainingPlan,
   listTrainingPlans, updateTrainingPlan
 } from '../../api/training'
 const THEME_KEY='fit_note_theme_index'
+const cachedUser=uni.getStorageSync(USER_KEY)||{}
+const ACTION_ORDER_KEY='fit_note_action_order_'+String(cachedUser.id||cachedUser.accountCode||'anonymous')
 const themes=[{accent:'#7775bd',accent2:'#a59bd2',pale:'#f1f0f9',pale2:'#faf9fd',glow:'119,117,189'},{accent:'#5f9fa5',accent2:'#8bbdaf',pale:'#edf6f5',pale2:'#f8fbfa',glow:'95,159,165'},{accent:'#bd8073',accent2:'#cda56f',pale:'#faf1ed',pale2:'#fdf9f5',glow:'189,128,115'}]
 const parts=[{key:'shoulder',name:'肩部',short:'肩',icon:'▽'},{key:'chest',name:'胸部',short:'胸',icon:'◇'},{key:'back',name:'背部',short:'背',icon:'⌁'},{key:'arms',name:'手臂',short:'臂',icon:'↯'},{key:'abs',name:'腹部',short:'腹',icon:'◎'},{key:'legs',name:'腿部',short:'腿',icon:'△'}]
 const equipmentLabels={barbell:'杠铃',dumbbell:'哑铃',machine:'器械',cable:'绳索',bodyweight:'徒手',other:'其他'}
@@ -139,7 +142,9 @@ async function loadExerciseLibrary(){
     if(!result?.hasMore)break
     query.page+=1
   }
-  actionLibrary.value=items
+  const order=uni.getStorageSync(ACTION_ORDER_KEY)
+  const orderIndex=new Map((Array.isArray(order)?order:[]).map((id,index)=>[id,index]))
+  actionLibrary.value=items.filter(item=>item.isSystem===false).sort((a,b)=>(orderIndex.get(a.id)??99999)-(orderIndex.get(b.id)??99999))
 }
 function showError(error,fallback='请求失败'){
   loadError.value=error?.message||fallback

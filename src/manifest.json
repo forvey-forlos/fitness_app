@@ -1,7 +1,7 @@
 {
-    "name" : "",
-    "appid" : "",
-    "description" : "",
+    "name" : "Fitness_app",
+    "appid" : "__UNI__B0B4B51",
+    "description" : "记录个人身体数据、健身训练、管理动作",
     "versionName" : "1.0.0",
     "versionCode" : "100",
     "transformPx" : false,
@@ -50,11 +50,12 @@
     "quickapp" : {},
     /* 小程序特有相关 */
     "mp-weixin" : {
-        "appid" : "__WECHAT_MINI_PROGRAM_APP_ID__",
+        "appid" : "wx175a7964537db146",
         "setting" : {
-            "urlCheck" : false
+            "urlCheck" : true
         },
-        "usingComponents" : true
+        "usingComponents" : true,
+        "permission" : {}
     },
     "mp-alipay" : {
         "usingComponents" : true
@@ -65,8 +66,8 @@
     "mp-toutiao" : {
         "usingComponents" : true
     },
-    "uniStatistics": {  
-        "enable": false
+    "uniStatistics" : {
+        "enable" : false
     },
     "vueVersion" : "3"
 }

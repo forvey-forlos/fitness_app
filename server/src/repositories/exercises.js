@@ -1,7 +1,8 @@
 const pool = require('../config/db')
 
 const selectColumns = [
-  'id, owner_user_id, name, name_normalized, category, muscle_group, equipment,',
+  'id, owner_user_id, name, name_normalized, body_parts, record_methods,',
+  'category, muscle_group, primary_muscles, secondary_muscles, variants, equipment, sort_order,',
   'is_system, version, request_hash, deleted_at,',
   "DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS created_at,",
   "DATE_FORMAT(updated_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS updated_at"
@@ -59,7 +60,7 @@ async function list(userId, filters) {
   const [rows] = await pool.execute(
     ['SELECT', selectColumns, 'FROM exercises', where,
       "ORDER BY FIELD(category, 'shoulder', 'chest', 'back', 'arms', 'abs', 'legs'),",
-      'is_system DESC, name_normalized ASC, id ASC',
+      'is_system DESC, sort_order ASC, name_normalized ASC, id ASC',
       'LIMIT ? OFFSET ?'].join(' '),
     [...params, filters.pageSize, (filters.page - 1) * filters.pageSize]
   )
@@ -83,11 +84,15 @@ async function countVisibleByCategory(userId) {
 async function create(record) {
   await pool.execute(
     ['INSERT INTO exercises',
-      '(id, owner_user_id, name, name_normalized, category, muscle_group,',
-      'equipment, is_system, idempotency_key, request_hash, version, created_at, updated_at)',
-      'VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 1, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))'].join(' '),
+      '(id, owner_user_id, name, name_normalized, body_parts, record_methods,',
+      'category, muscle_group, primary_muscles, secondary_muscles, variants, equipment, sort_order,',
+      'is_system, idempotency_key, request_hash, version, created_at, updated_at)',
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 1, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))'].join(' '),
     [record.id, record.ownerUserId, record.name, record.nameNormalized,
-      record.category, record.muscleGroup, record.equipment,
+      JSON.stringify(record.bodyParts), JSON.stringify(record.recordMethods),
+      record.category, record.muscleGroup, JSON.stringify(record.primaryMuscles),
+      JSON.stringify(record.secondaryMuscles), JSON.stringify(record.variants),
+      record.equipment, record.sortOrder,
       record.idempotencyKey, record.requestHash]
   )
 }
@@ -98,11 +103,21 @@ async function update(userId, id, version, changes) {
   for (const [key, column] of [
     ['name', 'name'], ['nameNormalized', 'name_normalized'],
     ['category', 'category'], ['muscleGroup', 'muscle_group'],
-    ['equipment', 'equipment']
+    ['equipment', 'equipment'], ['sortOrder', 'sort_order']
   ]) {
     if (changes[key] !== undefined) {
       assignments.push(column + ' = ?')
       params.push(changes[key])
+    }
+  }
+  for (const [key, column] of [
+    ['bodyParts', 'body_parts'], ['recordMethods', 'record_methods'],
+    ['primaryMuscles', 'primary_muscles'], ['secondaryMuscles', 'secondary_muscles'],
+    ['variants', 'variants']
+  ]) {
+    if (changes[key] !== undefined) {
+      assignments.push(column + ' = ?')
+      params.push(JSON.stringify(changes[key]))
     }
   }
   const [result] = await pool.execute(
