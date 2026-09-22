@@ -64,7 +64,7 @@ async function addToLibrary(userId, exerciseId) {
     `INSERT INTO user_exercise_preferences (user_id,exercise_id,version,created_at,updated_at,deleted_at)
      SELECT ?,e.id,1,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3),NULL FROM exercises e
      WHERE e.id=? AND e.is_system=1 AND e.owner_user_id IS NULL AND e.deleted_at IS NULL
-     ON DUPLICATE KEY UPDATE deleted_at=NULL,version=version+1,updated_at=UTC_TIMESTAMP(3)`,
+     ON DUPLICATE KEY UPDATE  deleted_at=NULL,version=user_exercise_preferences.version+1,updated_at=UTC_TIMESTAMP(3)`,
     [userId, exerciseId]
   )
 }
