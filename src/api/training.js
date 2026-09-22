@@ -46,6 +46,10 @@ export function getTrainingHistory(id) {
   return request({ url: `/api/v1/training-history/${encodeURIComponent(id)}` })
 }
 
+export function deleteTrainingHistory(id) {
+  return request({ url: `/api/v1/training-history/${encodeURIComponent(id)}`, method: 'DELETE' })
+}
+
 export function getWeeklyTrainingStats(query = {}) {
   return request({ url: withQuery('/api/v1/training-stats/week', query) })
 }

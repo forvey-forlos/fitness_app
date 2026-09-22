@@ -92,30 +92,37 @@ test('completion, immutable snapshots, idempotency, isolation, history and timez
     },
     async findOwnedById(userId, id) {
       const row = records.get(id)
-      return row && row.user_id === userId ? row : null
+      return row && row.user_id === userId && !row.deleted_at ? row : null
     },
     async listExercises(userId, id) {
       const row = records.get(id)
-      return row && row.user_id === userId ? children.get(id) || [] : []
+      return row && row.user_id === userId && !row.deleted_at ? children.get(id) || [] : []
     },
     async list(userId, filters) {
-      const rows = [...records.values()].filter((r) => r.user_id === userId &&
+      const rows = [...records.values()].filter((r) => r.user_id === userId && !r.deleted_at &&
         (!filters.startUtc || r.completed_at >= filters.startUtc.replace(' ', 'T') + 'Z') &&
         (!filters.endUtc || r.completed_at < filters.endUtc.replace(' ', 'T') + 'Z'))
         .sort((a, b) => b.completed_at.localeCompare(a.completed_at))
       return { total: rows.length, rows: rows.slice((filters.page - 1) * filters.pageSize, filters.page * filters.pageSize) }
     },
     async listCompletedInRange(userId, start, end) {
-      return [...records.values()].filter((r) => r.user_id === userId &&
+      return [...records.values()].filter((r) => r.user_id === userId && !r.deleted_at &&
         r.completed_at >= start.replace(' ', 'T') + 'Z' &&
         r.completed_at < end.replace(' ', 'T') + 'Z')
         .map((r) => ({ id: r.id, completed_at: r.completed_at }))
     },
     async listRecentCompletions(userId, beforeUtc, cursor, limit) {
-      return [...records.values()].filter((r) => r.user_id === userId &&
+      return [...records.values()].filter((r) => r.user_id === userId && !r.deleted_at &&
         r.completed_at < beforeUtc.replace(' ', 'T') + 'Z')
         .sort((a, b) => b.completed_at.localeCompare(a.completed_at))
         .slice(0, limit).map((r) => ({ id: r.id, completed_at: r.completed_at }))
+    },
+    async softDelete(userId, id) {
+      const row = records.get(id)
+      if (!row || row.user_id !== userId || row.deleted_at) return false
+      row.deleted_at = '2026-09-19T01:00:00.000Z'
+      row.version += 1
+      return true
     }
   }
   const service = createTrainingSessionsService({
@@ -213,6 +220,15 @@ test('completion, immutable snapshots, idempotency, isolation, history and timez
     assert.equal((await request('GET', '/training-stats/week', userB)).body.data.completedCount, 0)
     assert.equal((await request('GET', '/training-stats/weekly?weekStart=2026-09-14&timezone=Asia/Shanghai', userA)).status, 200)
     assert.equal((await request('GET', '/training-stats/weekly?timezone=UTC', userA)).status, 400)
+  })
+  await t.test('history deletion is soft, private, and excluded from reads', async () => {
+    assert.equal((await request('DELETE', '/training-history/' + recordId, userB)).status, 404)
+    const removed = await request('DELETE', '/training-history/' + recordId, userA)
+    assert.equal(removed.status, 200)
+    assert.equal(removed.body.data.deleted, true)
+    assert.equal((await request('GET', '/training-history/' + recordId, userA)).status, 404)
+    const list = await request('GET', '/training-history', userA)
+    assert.equal(list.body.data.items.some((item) => item.id === recordId), false)
   })
 })
 

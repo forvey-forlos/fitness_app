@@ -1,5 +1,5 @@
 const bodyParts=['chest','back','shoulder','arms','legs','glutes','core','full_body','cardio','other']
-const recordMethods=['weight','reps','distance','duration','incline','angle','other']
+const recordMethods=['weight','reps','duration','distance','speed','incline','assistance_weight','rir','rpe','angle','other']
 const equipmentTypes=['barbell','dumbbell','machine','cable','bodyweight','kettlebell','band','cardio_machine','other']
 const muscleParts={
   pectoralis_major:['chest'],pectoralis_minor:['chest'],serratus_anterior:['chest','shoulder'],

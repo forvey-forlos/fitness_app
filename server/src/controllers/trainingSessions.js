@@ -14,6 +14,9 @@ function createTrainingSessionsController(service) {
     async get(req, res) {
       sendSuccess(res, await sessions().get(req.userId, req.params.id))
     },
+    async remove(req, res) {
+      sendSuccess(res, await sessions().remove(req.userId, req.params.id))
+    },
     async weekly(req, res) {
       sendSuccess(res, await sessions().weekly(req.userId, req.validated.weekStart, req.validated.timezone))
     }

@@ -8,9 +8,10 @@ const sessionColumns = [
 ].join(' ')
 
 const exerciseColumns = [
-  'id, exercise_id, exercise_name_snapshot, category_snapshot,',
-  'muscle_group_snapshot, equipment_snapshot, sort_order, sets, reps,',
-  'weight, actual_sets, actual_reps, actual_weight, rest_seconds, notes'
+  'id, exercise_id, exercise_variant_id, exercise_name_snapshot, exercise_variant_name_snapshot, category_snapshot,',
+  'muscle_group_snapshot, equipment_snapshot, primary_muscles_snapshot, secondary_muscles_snapshot, sort_order, sets, reps,',
+  'weight, actual_sets, actual_reps, actual_weight, body_part_snapshot,',
+  'record_methods, target_metrics, actual_groups, rest_seconds, notes'
 ].join(' ')
 
 function createTrainingSessionsRepository(pool) {
@@ -47,12 +48,16 @@ function createTrainingSessionsRepository(pool) {
           },
           async listPlanExercises(userId, planId) {
             const [rows] = await connection.execute(
-              ['SELECT pe.exercise_id, pe.sort_order, pe.sets, pe.reps, pe.weight,',
-                'pe.rest_seconds, pe.notes, e.name AS exercise_name,',
-                'e.category, e.muscle_group, e.equipment',
+              ['SELECT pe.exercise_id, pe.exercise_variant_id, pe.sort_order, pe.sets, pe.reps, pe.weight,',
+                'pe.body_part, COALESCE(pe.record_methods,e.record_methods) AS record_methods, pe.target_metrics, pe.actual_groups, pe.rest_seconds, pe.notes,',
+                'COALESCE(NULLIF(uep.display_name,\'\'),e.default_display_name_zh,e.name) AS exercise_name,',
+                'ev.default_display_name_zh AS exercise_variant_name, e.category, e.muscle_group, e.equipment,',
+                'e.primary_muscles, e.secondary_muscles',
                 'FROM training_plan_exercises pe',
                 'JOIN training_plans p ON p.id = pe.training_plan_id',
                 'JOIN exercises e ON e.id = pe.exercise_id',
+                'LEFT JOIN user_exercise_preferences uep ON uep.exercise_id=e.id AND uep.user_id=p.user_id AND uep.deleted_at IS NULL',
+                'LEFT JOIN exercise_variants ev ON ev.id=pe.exercise_variant_id AND ev.exercise_id=pe.exercise_id AND ev.deleted_at IS NULL',
                 'WHERE p.id = ? AND p.user_id = ? AND p.deleted_at IS NULL',
                 'AND pe.deleted_at IS NULL ORDER BY pe.sort_order ASC, pe.id ASC'].join(' '),
               [planId, userId]
@@ -75,14 +80,20 @@ function createTrainingSessionsRepository(pool) {
             for (const item of items) {
               await connection.execute(
                 ['INSERT INTO training_session_exercises',
-                  '(id, session_id, exercise_id, exercise_name_snapshot, category_snapshot,',
-                  'muscle_group_snapshot, equipment_snapshot, sort_order, sets, actual_sets, reps, actual_reps,',
-                  'weight, actual_weight, rest_seconds, notes, created_at)',
-                  'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(3))'].join(' '),
-                [item.id, sessionId, item.exercise_id, item.exercise_name,
-                  item.category, item.muscle_group, item.equipment, item.sort_order,
+                  '(id, session_id, exercise_id, exercise_variant_id, exercise_name_snapshot, exercise_variant_name_snapshot, category_snapshot,',
+                  'muscle_group_snapshot, equipment_snapshot, primary_muscles_snapshot, secondary_muscles_snapshot, sort_order, sets, actual_sets, reps, actual_reps,',
+                  'weight, actual_weight, body_part_snapshot, record_methods, target_metrics, actual_groups, rest_seconds, notes, created_at)',
+                  'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(3))'].join(' '),
+                [item.id, sessionId, item.exercise_id, item.exercise_variant_id, item.exercise_name, item.exercise_variant_name,
+                  item.category, item.muscle_group, item.equipment,
+                  item.primary_muscles ? (typeof item.primary_muscles === 'string' ? item.primary_muscles : JSON.stringify(item.primary_muscles)) : null,
+                  item.secondary_muscles ? (typeof item.secondary_muscles === 'string' ? item.secondary_muscles : JSON.stringify(item.secondary_muscles)) : null, item.sort_order,
                   item.sets, item.actual_sets, item.reps, item.actual_reps,
-                  item.weight, item.actual_weight, item.rest_seconds, item.notes]
+                  item.weight, item.actual_weight, item.body_part,
+                  item.record_methods ? JSON.stringify(item.record_methods) : null,
+                  item.target_metrics ? JSON.stringify(item.target_metrics) : null,
+                  item.actual_groups ? JSON.stringify(item.actual_groups) : null,
+                  item.rest_seconds, item.notes]
               )
             }
           },
@@ -175,6 +186,13 @@ function createTrainingSessionsRepository(pool) {
         [...params, limit]
       )
       return rows
+    },
+    async softDelete(userId, id) {
+      const [result] = await pool.execute(
+        `UPDATE training_sessions SET deleted_at=UTC_TIMESTAMP(3),updated_at=UTC_TIMESTAMP(3),version=version+1
+         WHERE id=? AND user_id=? AND deleted_at IS NULL`, [id, userId]
+      )
+      return result.affectedRows === 1
     }
   }
 }
@@ -191,5 +209,6 @@ module.exports = {
   listExercises: (...args) => defaultRepository().listExercises(...args),
   list: (...args) => defaultRepository().list(...args),
   listCompletedInRange: (...args) => defaultRepository().listCompletedInRange(...args),
-  listRecentCompletions: (...args) => defaultRepository().listRecentCompletions(...args)
+  listRecentCompletions: (...args) => defaultRepository().listRecentCompletions(...args),
+  softDelete: (...args) => defaultRepository().softDelete(...args)
 }

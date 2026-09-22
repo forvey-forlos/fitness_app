@@ -15,6 +15,10 @@ function createExercisesController(service) {
       const result = await exercises.create(req.userId, req.validated)
       sendSuccess(res, result.exercise, result.created ? 201 : 200)
     },
+    async addToLibrary(req, res) {
+      const exercises = service || require('../services/exercises').createExercisesService()
+      sendSuccess(res, await exercises.addToLibrary(req.userId, req.params.id), 201)
+    },
     async update(req, res) {
       const exercises = service || require('../services/exercises').createExercisesService()
       sendSuccess(res, await exercises.update(req.userId, req.params.id, req.validated))

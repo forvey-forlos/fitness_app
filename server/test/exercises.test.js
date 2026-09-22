@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
 const { test } = require('node:test')
-const { randomBytes, randomUUID } = require('node:crypto')
 const jwt = require('jsonwebtoken')
+const { randomBytes } = require('node:crypto')
 
 const createApp = require('../src/app')
 const { createAuthMiddleware } = require('../src/middlewares/auth')
@@ -11,98 +11,144 @@ const userA = '550e8400-e29b-41d4-a716-446655440001'
 const userB = '550e8400-e29b-41d4-a716-446655440002'
 const stamp = '2026-09-18T00:00:00.000000Z'
 
-test('exercise catalog and custom actions enforce filters and ownership', async (t) => {
+function systemExercise(overrides = {}) {
+  return {
+    id: '660e8400-e29b-41d4-a716-446655440001',
+    owner_user_id: null,
+    name: '杠铃平板卧推',
+    name_normalized: '杠铃平板卧推',
+    standard_name_en: 'Barbell Bench Press',
+    default_display_name_zh: '杠铃卧推',
+    default_display_name_normalized: '杠铃卧推',
+    category: 'chest',
+    muscle_group: 'pectoralis_major',
+    equipment: 'barbell',
+    movement_type: 'strength',
+    body_parts: JSON.stringify(['chest']),
+    record_methods: JSON.stringify(['weight', 'reps']),
+    primary_muscles: JSON.stringify(['pectoralis_major']),
+    secondary_muscles: JSON.stringify(['triceps', 'anterior_deltoid']),
+    variants: JSON.stringify([]),
+    aliases: JSON.stringify(['卧推', 'Bench Press']),
+    normalized_variants: JSON.stringify([
+      { id: '770e8400-e29b-41d4-a716-446655440001', name: '宽握', code: 'wide_grip', sortOrder: 10 }
+    ]),
+    sort_order: 10,
+    is_system: 1,
+    created_at: stamp,
+    updated_at: stamp,
+    deleted_at: null,
+    ...overrides
+  }
+}
+
+test('system exercise catalog and user preferences enforce identity and ownership', async (t) => {
   const secret = randomBytes(48).toString('hex')
   const records = new Map()
-  function add(record) {
-    const row = {
-      id: randomUUID(), owner_user_id: null,
-      name: '杠铃平板卧推', name_normalized: '杠铃平板卧推',
-      category: 'chest', muscle_group: 'chest', equipment: 'barbell',
-      is_system: 1, version: 1, request_hash: null, idempotency_key: null,
-      created_at: stamp, updated_at: stamp, deleted_at: null,
-      ...record
+  const bench = systemExercise()
+  const pulldown = systemExercise({
+    id: '660e8400-e29b-41d4-a716-446655440002',
+    name: '高位下拉',
+    name_normalized: '高位下拉',
+    standard_name_en: 'Lat Pulldown',
+    default_display_name_zh: '高位下拉',
+    default_display_name_normalized: '高位下拉',
+    category: 'back',
+    muscle_group: 'latissimus_dorsi',
+    equipment: 'cable',
+    body_parts: JSON.stringify(['back']),
+    primary_muscles: JSON.stringify(['latissimus_dorsi']),
+    secondary_muscles: JSON.stringify(['biceps']),
+    aliases: JSON.stringify(['拉背', '下拉', 'Lat Pulldown']),
+    normalized_variants: JSON.stringify([
+      { id: '770e8400-e29b-41d4-a716-446655440002', name: '中立握', code: 'neutral_grip', sortOrder: 10 }
+    ])
+  })
+  records.set(bench.id, bench)
+  records.set(pulldown.id, pulldown)
+  const preferences = new Map()
+  const preferenceKey = (userId, exerciseId) => userId + ':' + exerciseId
+
+  function visibleRow(userId, row) {
+    if (!row || row.deleted_at || !row.is_system) return null
+    const preference = preferences.get(preferenceKey(userId, row.id))
+    const active = preference && !preference.deleted_at
+    return {
+      ...row,
+      resolved_name: active && preference.display_name
+        ? preference.display_name : row.default_display_name_zh,
+      personal_display_name: active ? preference.display_name : null,
+      preference_version: active ? preference.version : 0,
+      in_library: active ? 1 : 0
     }
-    records.set(row.id, row)
-    return row
   }
-  const system = add({})
-  add({ name: '绳索弯举', name_normalized: '绳索弯举', category: 'arms',
-    muscle_group: 'biceps', equipment: 'cable' })
-  const own = add({ owner_user_id: userA, is_system: 0,
-    name: '自定义推胸', name_normalized: '自定义推胸', equipment: 'machine' })
-  const privateB = add({ owner_user_id: userB, is_system: 0,
-    name: '私有卧推', name_normalized: '私有卧推', equipment: 'dumbbell' })
+
   const repository = {
     async findVisibleById(userId, id) {
-      const row = records.get(id)
-      return row && !row.deleted_at && (row.is_system || row.owner_user_id === userId)
-        ? row : null
-    },
-    async findByNormalizedName(userId, category, normalized) {
-      return [...records.values()].find((row) => !row.is_system && !row.deleted_at &&
-        row.owner_user_id === userId && row.category === category &&
-        row.name_normalized === normalized) || null
-    },
-    async findByIdempotencyKey(userId, key) {
-      return [...records.values()].find((row) => !row.is_system &&
-        row.owner_user_id === userId && row.idempotency_key === key) || null
+      return visibleRow(userId, records.get(id))
     },
     async list(userId, filters) {
-      const rows = [...records.values()].filter((row) =>
-        !row.deleted_at && (row.is_system || row.owner_user_id === userId) &&
-        (!filters.category || row.category === filters.category) &&
-        (!filters.muscleGroup || row.muscle_group === filters.muscleGroup) &&
-        (!filters.equipment || row.equipment === filters.equipment) &&
-        (!filters.keyword || row.name_normalized.includes(filters.keyword)))
-        .sort((a, b) => b.is_system - a.is_system ||
-          a.category.localeCompare(b.category) ||
-          a.name_normalized.localeCompare(b.name_normalized) ||
-          a.id.localeCompare(b.id))
+      let rows = [...records.values()].map((row) => visibleRow(userId, row)).filter(Boolean)
+      if (filters.scope === 'library') rows = rows.filter((row) => row.in_library)
+      if (filters.category) rows = rows.filter((row) => row.category === filters.category)
+      if (filters.muscleGroup) {
+        rows = rows.filter((row) => row.muscle_group === filters.muscleGroup ||
+          JSON.parse(row.primary_muscles).includes(filters.muscleGroup) ||
+          JSON.parse(row.secondary_muscles).includes(filters.muscleGroup))
+      }
+      if (filters.equipment) rows = rows.filter((row) => row.equipment === filters.equipment)
+      if (filters.keyword) {
+        rows = rows.filter((row) => [
+          row.name_normalized,
+          row.standard_name_en.toLowerCase(),
+          row.default_display_name_normalized,
+          row.personal_display_name?.toLowerCase(),
+          ...JSON.parse(row.aliases).map((alias) => alias.toLowerCase())
+        ].filter(Boolean).some((value) => value.includes(filters.keyword)))
+      }
+      rows.sort((a, b) => a.sort_order - b.sort_order || a.id.localeCompare(b.id))
       return {
         total: rows.length,
         rows: rows.slice((filters.page - 1) * filters.pageSize, filters.page * filters.pageSize)
       }
     },
-    async create(record) {
-      if (record.idempotencyKey && await this.findByIdempotencyKey(record.ownerUserId, record.idempotencyKey)) {
-        const error = new Error('duplicate')
-        error.code = 'ER_DUP_ENTRY'
-        throw error
-      }
-      add({
-        id: record.id, owner_user_id: record.ownerUserId, is_system: 0,
-        name: record.name, name_normalized: record.nameNormalized,
-        category: record.category, muscle_group: record.muscleGroup,
-        equipment: record.equipment,
-        idempotency_key: record.idempotencyKey, request_hash: record.requestHash
+    async addToLibrary(userId, exerciseId) {
+      const key = preferenceKey(userId, exerciseId)
+      const current = preferences.get(key)
+      preferences.set(key, {
+        user_id: userId,
+        exercise_id: exerciseId,
+        display_name: current?.display_name || null,
+        version: current ? current.version + 1 : 1,
+        deleted_at: null
       })
     },
-    async update(userId, id, version, changes) {
-      const row = records.get(id)
-      if (!row || row.owner_user_id !== userId || row.is_system ||
-          row.deleted_at || row.version !== version) return false
-      for (const [key, column] of [
-        ['name', 'name'], ['nameNormalized', 'name_normalized'],
-        ['category', 'category'], ['muscleGroup', 'muscle_group'],
-        ['equipment', 'equipment']
-      ]) {
-        if (changes[key] !== undefined) row[column] = changes[key]
-      }
-      row.version++
+    async updatePreference(userId, exerciseId, version, displayName) {
+      const key = preferenceKey(userId, exerciseId)
+      const current = preferences.get(key)
+      if (!current || current.deleted_at || current.version !== version) return false
+      current.display_name = displayName
+      current.version += 1
       return true
     },
-    async softDelete(userId, id, version) {
-      const row = records.get(id)
-      if (!row || row.owner_user_id !== userId || row.is_system ||
-          row.deleted_at || row.version !== version) return false
-      row.deleted_at = stamp
-      row.version++
+    async removeFromLibrary(userId, exerciseId) {
+      const current = preferences.get(preferenceKey(userId, exerciseId))
+      if (!current || current.deleted_at) return false
+      current.deleted_at = stamp
+      current.version += 1
       return true
+    },
+    async findVariant(exerciseId, variantId) {
+      const row = records.get(exerciseId)
+      const variant = row && JSON.parse(row.normalized_variants).find((item) => item.id === variantId)
+      return variant || null
     }
   }
+
   const usersRepository = {
-    async findActiveById(id) { return [userA, userB].includes(id) ? { id } : null }
+    async findActiveById(id) {
+      return [userA, userB].includes(id) ? { id } : null
+    }
   }
   const app = createApp({
     authMiddleware: createAuthMiddleware({ tokenConfig: { accessSecret: secret } }),
@@ -115,8 +161,9 @@ test('exercise catalog and custom actions enforce filters and ownership', async 
   })
   t.after(() => new Promise((resolve, reject) =>
     server.close((error) => error ? reject(error) : resolve())))
+
   const base = 'http://127.0.0.1:' + server.address().port + '/api/v1/exercises'
-  async function request(method, path, userId, body, key) {
+  async function request(method, path, userId, body) {
     const response = await fetch(base + path, {
       method,
       headers: {
@@ -125,110 +172,117 @@ test('exercise catalog and custom actions enforce filters and ownership', async 
             algorithm: 'HS256', subject: userId, expiresIn: 1800
           })
         } : {}),
-        ...(body ? { 'Content-Type': 'application/json' } : {}),
-        ...(key ? { 'Idempotency-Key': key } : {})
+        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {})
       },
-      ...(body ? { body: JSON.stringify(body) } : {})
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {})
     })
     const result = await response.json()
     assert.equal(result.requestId, response.headers.get('x-request-id'))
     return { status: response.status, result }
   }
 
-  await t.test('all five endpoints require login', async () => {
+  await t.test('all catalog and preference endpoints require login', async () => {
     for (const [method, path, body] of [
-      ['GET', ''], ['GET', '/' + system.id],
-      ['POST', '', { name: '测试', category: 'chest', muscleGroup: 'chest', equipment: 'barbell' }],
-      ['PATCH', '/' + own.id, { version: 1, name: '测试' }],
-      ['DELETE', '/' + own.id]
+      ['GET', ''],
+      ['GET', '/' + bench.id],
+      ['POST', ''],
+      ['POST', '/' + bench.id + '/library'],
+      ['PATCH', '/' + bench.id, { displayName: '我的卧推', version: 1 }],
+      ['DELETE', '/' + bench.id]
     ]) {
       const response = await request(method, path, null, body)
       assert.equal(response.status, 401)
     }
   })
 
-  await t.test('list includes system and own actions, not other users', async () => {
-    const response = await request('GET', '', userA)
-    assert.equal(response.status, 200)
-    assert.equal(response.result.data.total, 3)
-    assert.deepEqual(new Set(response.result.data.items.map((item) => item.id)),
-      new Set([system.id, own.id, ...[...records.values()]
-        .filter((row) => row.is_system && row.id !== system.id).map((row) => row.id)]))
-    assert.equal(response.result.data.items.some((item) => item.id === privateB.id), false)
-    const systemDetail = await request('GET', '/' + system.id, userA)
-    assert.equal(systemDetail.result.data.isSystem, true)
-    const privateDetail = await request('GET', '/' + privateB.id, userA)
-    assert.equal(privateDetail.status, 404)
+  await t.test('catalog contains only main system exercises and personal library starts empty', async () => {
+    const catalog = await request('GET', '', userA)
+    assert.equal(catalog.status, 200)
+    assert.equal(catalog.result.data.total, 2)
+    assert.equal(catalog.result.data.items.every((item) => item.isSystem), true)
+    assert.equal(catalog.result.data.items.every((item) => !item.inLibrary), true)
+    assert.equal(catalog.result.data.items[0].variants.length, 1)
+
+    const library = await request('GET', '?scope=library', userA)
+    assert.equal(library.status, 200)
+    assert.equal(library.result.data.total, 0)
   })
 
-  await t.test('category, muscle group, equipment and keyword filter results', async () => {
-    const chest = await request('GET', '?category=chest&equipment=barbell', userA)
-    assert.deepEqual(chest.result.data.items.map((item) => item.id), [system.id])
-    const arms = await request('GET', '?muscleGroup=biceps&equipment=cable', userA)
-    assert.equal(arms.result.data.total, 1)
-    const search = await request('GET', '?keyword=%E5%8D%A7%E6%8E%A8', userA)
-    assert.deepEqual(search.result.data.items.map((item) => item.id), [system.id])
-    const paged = await request('GET', '?page=1&pageSize=1', userA)
-    assert.equal(paged.result.data.hasMore, true)
-  })
-
-  let createdId
-  await t.test('create enforces ownership, normalization, dedupe and idempotency', async () => {
-    const body = {
-      name: 'My Press', category: 'chest', muscleGroup: 'chest', equipment: 'dumbbell'
+  await t.test('search matches standard name, default name, alias and personal name', async () => {
+    for (const keyword of ['Lat%20Pulldown', '%E9%AB%98%E4%BD%8D%E4%B8%8B%E6%8B%89', '%E6%8B%89%E8%83%8C']) {
+      const response = await request('GET', '?keyword=' + keyword, userA)
+      assert.deepEqual(response.result.data.items.map((item) => item.id), [pulldown.id])
     }
-    const forged = await request('POST', '', userA, {
-      ...body, ownerUserId: userB, isSystem: true
+
+    await request('POST', '/' + pulldown.id + '/library', userA)
+    await request('PATCH', '/' + pulldown.id, userA, { displayName: '我的下拉', version: 1 })
+    const personal = await request('GET', '?keyword=%E6%88%91%E7%9A%84%E4%B8%8B%E6%8B%89', userA)
+    assert.deepEqual(personal.result.data.items.map((item) => item.id), [pulldown.id])
+    assert.equal(personal.result.data.items[0].name, '我的下拉')
+    assert.equal(personal.result.data.items[0].standardName, 'Lat Pulldown')
+  })
+
+  await t.test('creating a completely new exercise is disabled', async () => {
+    const response = await request('POST', '', userA, {
+      name: '用户伪造动作',
+      ownerUserId: userA,
+      isSystem: true
     })
-    assert.equal(forged.status, 400)
-    const created = await request('POST', '', userA, body, 'create-my-press')
-    assert.equal(created.status, 201)
-    createdId = created.result.data.id
-    assert.equal(records.get(createdId).owner_user_id, userA)
-    assert.equal(records.get(createdId).is_system, 0)
-    assert.equal(records.get(createdId).name_normalized, 'my press')
-    const retry = await request('POST', '', userA, body, 'create-my-press')
-    assert.equal(retry.status, 200)
-    assert.equal(retry.result.data.id, createdId)
-    const duplicate = await request('POST', '', userA, { ...body, name: 'MY PRESS' })
-    assert.equal(duplicate.status, 409)
-    assert.equal(duplicate.result.code, 'EXERCISE_ALREADY_EXISTS')
-    const conflict = await request('POST', '', userA, { ...body, name: 'Other Press' }, 'create-my-press')
-    assert.equal(conflict.status, 409)
+    assert.equal(response.status, 405)
+    assert.equal(response.result.code, 'CUSTOM_EXERCISES_DISABLED')
   })
 
-  await t.test('only the owner may edit, with optimistic version control', async () => {
-    const deniedSystem = await request('PATCH', '/' + system.id, userA,
-      { version: 1, name: '改系统动作' })
-    assert.equal(deniedSystem.status, 403)
-    const deniedOther = await request('PATCH', '/' + privateB.id, userA,
-      { version: 1, name: '改别人动作' })
-    assert.equal(deniedOther.status, 404)
-    const updated = await request('PATCH', '/' + createdId, userA,
-      { version: 1, name: 'My Press 2', equipment: 'machine' })
-    assert.equal(updated.status, 200)
-    assert.equal(updated.result.data.version, 2)
-    assert.equal(updated.result.data.equipment, 'machine')
-    const stale = await request('PATCH', '/' + createdId, userA,
-      { version: 1, name: 'My Press 3' })
+  await t.test('adding and renaming affect only the current user preference', async () => {
+    const added = await request('POST', '/' + bench.id + '/library', userA)
+    assert.equal(added.status, 201)
+    assert.equal(added.result.data.id, bench.id)
+    assert.equal(added.result.data.inLibrary, true)
+    assert.equal(added.result.data.version, 1)
+
+    const renamed = await request('PATCH', '/' + bench.id, userA, {
+      displayName: '胸日卧推',
+      version: 1
+    })
+    assert.equal(renamed.status, 200)
+    assert.equal(renamed.result.data.name, '胸日卧推')
+    assert.equal(renamed.result.data.standardName, 'Barbell Bench Press')
+    assert.deepEqual(renamed.result.data.recordMethods, ['weight', 'reps'])
+    assert.equal(renamed.result.data.version, 2)
+
+    const otherUser = await request('GET', '/' + bench.id, userB)
+    assert.equal(otherUser.result.data.name, '杠铃卧推')
+    assert.equal(otherUser.result.data.personalDisplayName, null)
+
+    const systemMutation = await request('PATCH', '/' + bench.id, userA, {
+      displayName: '违规修改',
+      equipment: 'machine',
+      version: 2
+    })
+    assert.equal(systemMutation.status, 400)
+
+    const stale = await request('PATCH', '/' + bench.id, userA, {
+      displayName: '旧版本覆盖',
+      version: 1
+    })
     assert.equal(stale.status, 409)
+    assert.equal(stale.result.code, 'VERSION_CONFLICT')
   })
 
-  await t.test('delete is soft and removed action stays hidden', async () => {
-    const deniedSystem = await request('DELETE', '/' + system.id, userA)
-    assert.equal(deniedSystem.status, 403)
-    const deniedOther = await request('DELETE', '/' + privateB.id, userA)
-    assert.equal(deniedOther.status, 404)
-    const deleted = await request('DELETE', '/' + createdId, userA)
-    assert.equal(deleted.status, 200)
-    assert.equal(records.get(createdId).deleted_at, stamp)
-    const detail = await request('GET', '/' + createdId, userA)
-    assert.equal(detail.status, 404)
-    const list = await request('GET', '?keyword=My%20Press', userA)
-    assert.equal(list.result.data.total, 0)
-    const recreated = await request('POST', '', userA,
-      { name: 'My Press 2', category: 'chest', muscleGroup: 'chest', equipment: 'machine' })
-    assert.equal(recreated.status, 201)
-    assert.notEqual(recreated.result.data.id, createdId)
+  await t.test('removing from library does not delete the system exercise', async () => {
+    const removed = await request('DELETE', '/' + bench.id, userA)
+    assert.equal(removed.status, 200)
+    assert.deepEqual(removed.result.data, { id: bench.id, deleted: true })
+
+    const library = await request('GET', '?scope=library', userA)
+    assert.equal(library.result.data.items.some((item) => item.id === bench.id), false)
+
+    const catalogDetail = await request('GET', '/' + bench.id, userA)
+    assert.equal(catalogDetail.status, 200)
+    assert.equal(catalogDetail.result.data.id, bench.id)
+    assert.equal(catalogDetail.result.data.inLibrary, false)
+    assert.equal(catalogDetail.result.data.name, '杠铃卧推')
+
+    const secondRemove = await request('DELETE', '/' + bench.id, userA)
+    assert.equal(secondRemove.status, 404)
   })
 })

@@ -26,14 +26,14 @@
       <view class="divider"/>
 
       <view v-if="loading" class="empty-state"><view class="loading-dot"/><text>正在整理动作库…</text></view>
-      <view v-else-if="!filteredActions.length" class="empty-state"><text class="empty-symbol">＋</text><text>{{ actions.length ? '没有符合条件的动作' : '你的动作库还是空的' }}</text><text class="empty-note">{{ actions.length ? '试试调整关键词或筛选条件' : '点击标题旁的＋，从目录选取或自行添加' }}</text></view>
+      <view v-else-if="!filteredActions.length" class="empty-state"><text class="empty-symbol">＋</text><text>{{ actions.length ? '没有符合条件的动作' : '你的动作库还是空的' }}</text><text class="empty-note">{{ actions.length ? '试试调整关键词或筛选条件' : '点击标题旁的＋，从系统动作目录选取' }}</text></view>
       <view v-else class="alphabet-list">
         <view v-for="section in actionSections" :key="section.initial" class="letter-section" :class="{plain:!showLetterHeaders}">
           <text v-if="showLetterHeaders" class="letter">{{ section.initial }}</text>
           <view class="action-stack">
             <view v-for="action in section.items" :key="action.id" class="action-row" hover-class="row-pressed" @tap="openEditor(action)">
               <view class="action-main"><text class="action-name">{{ action.name }}</text><text class="action-detail">{{ actionDescription(action) }}</text></view>
-              <view class="row-actions"><text class="edit">编辑</text><text class="delete" @tap.stop="removeAction(action)">×</text></view>
+              <view class="row-actions"><text class="edit">详情/改名</text><text class="delete" @tap.stop="removeAction(action)">×</text></view>
             </view>
           </view>
         </view>
@@ -53,61 +53,21 @@
             <button class="pick-btn" :disabled="isPicked(action)||mutating" @tap="pickCatalogAction(action)">{{ isPicked(action)?'已选':'选取' }}</button>
           </view>
         </scroll-view>
-        <button class="create-from-sheet" @tap="libraryVisible=false;openEditor()">＋ 自行添加动作</button>
+        <text class="field-help">当前版本只允许从系统标准动作库添加，所有关联均使用 exercise_id。</text>
       </view>
     </view>
 
     <view v-if="editorVisible" class="overlay editor-overlay" @tap.self="closeEditor">
       <scroll-view class="editor-card" scroll-y>
         <view class="editor-content">
-        <view class="editor-head"><view><text class="sheet-kicker">MOVEMENT DETAILS</text><text class="sheet-title">{{ editor.id?'编辑动作':'添加动作' }}</text></view><text class="close" @tap="closeEditor">×</text></view>
-        <view class="field"><text class="field-label">动作名称</text><input v-model="editor.name" maxlength="40" placeholder="输入动作名称"/></view>
-        <view class="edit-guide"><view class="guide-spark">✦</view><text>点击末端“＋”继续添加；双击选项删除，手机端可长按</text></view>
-
-        <view class="field">
-          <text class="field-label">训练部位</text>
-          <view class="tag-editor">
-            <view v-for="key in editor.bodyParts" :key="key" class="chain-item" @dblclick="removeTag('bodyParts',key)" @longpress="removeTag('bodyParts',key)"><view class="chain-node"/><text>{{ bodyPartName(key) }}</text></view>
-            <picker :range="availableBodyParts" range-key="name" @change="addTagFromPicker('bodyParts',availableBodyParts,$event)"><view class="chain-add"><view class="chain-node"/>＋</view></picker>
-          </view>
-          <text class="field-help">可以组合多个部位，肌群选项会随之联动</text>
-        </view>
-
-        <view class="field">
-          <text class="field-label">记录方式</text>
-          <view class="tag-editor">
-            <view v-for="key in editor.recordMethods" :key="key" class="chain-item" @dblclick="removeTag('recordMethods',key)" @longpress="removeTag('recordMethods',key)"><view class="chain-node"/><text>{{ recordMethodName(key) }}</text></view>
-            <picker :range="availableRecordMethods" range-key="name" @change="addTagFromPicker('recordMethods',availableRecordMethods,$event)"><view class="chain-add"><view class="chain-node"/>＋</view></picker>
-          </view>
-          <text class="field-help">选择训练时需要记录的数据维度</text>
-        </view>
-
-        <view class="advanced-toggle" @tap="advancedOpen=!advancedOpen"><text>高级选项</text><text>{{ advancedOpen?'收起 ︿':'展开 ﹀' }}</text></view>
-        <view v-if="advancedOpen" class="advanced-panel">
-          <view class="field compact">
-            <text class="field-label">变式</text>
-            <view class="tag-editor">
-              <view v-for="variant in editor.variants" :key="variant.id" class="chain-item variant-chain" @tap="applyVariant(variant)" @dblclick.stop="removeVariant(variant.id)" @longpress.stop="removeVariant(variant.id)"><view class="chain-node"/><text>{{ variant.name }}</text></view>
-              <view class="chain-add" @tap="addVariant"><view class="chain-node"/>＋</view>
-            </view>
-            <text class="field-help">点击变式应用对应肌群；双击删除，手机端可长按</text>
-          </view>
-          <view class="field compact">
-            <text class="field-label">主要训练肌群</text>
-            <view class="tag-editor">
-              <view v-for="key in editor.primaryMuscles" :key="key" class="chain-item muscle-chain" @dblclick="removeTag('primaryMuscles',key)" @longpress="removeTag('primaryMuscles',key)"><view class="chain-node"/><text>{{ muscleName(key) }}</text></view>
-              <picker :range="availablePrimaryMuscles" range-key="name" @change="addTagFromPicker('primaryMuscles',availablePrimaryMuscles,$event)"><view class="chain-add"><view class="chain-node"/>＋</view></picker>
-            </view>
-          </view>
-          <view class="field compact">
-            <text class="field-label">辅助肌群</text>
-            <view class="tag-editor">
-              <view v-for="key in editor.secondaryMuscles" :key="key" class="chain-item secondary-chain" @dblclick="removeTag('secondaryMuscles',key)" @longpress="removeTag('secondaryMuscles',key)"><view class="chain-node"/><text>{{ muscleName(key) }}</text></view>
-              <picker :range="availableSecondaryMuscles" range-key="name" @change="addTagFromPicker('secondaryMuscles',availableSecondaryMuscles,$event)"><view class="chain-add"><view class="chain-node"/>＋</view></picker>
-            </view>
-          </view>
-          <view class="field compact"><text class="field-label">器械</text><picker :range="equipmentOptions" range-key="name" @change="changeEditorEquipment"><view class="select-box">{{ equipmentName(editor.equipment) }} <text>⌄</text></view></picker></view>
-        </view>
+        <view class="editor-head"><view><text class="sheet-kicker">MOVEMENT DETAILS</text><text class="sheet-title">动作详情</text></view><text class="close" @tap="closeEditor">×</text></view>
+        <view class="field"><text class="field-label">个人显示名称</text><input v-model="editor.personalDisplayName" maxlength="40" :placeholder="editor.defaultDisplayName||'使用系统默认名称'"/></view>
+        <view class="edit-guide"><view class="guide-spark">✦</view><text>留空会恢复系统默认名称；这里只修改你的显示名称，不改变系统动作本体。</text></view>
+        <view class="field"><text class="field-label">系统标准名称</text><view class="select-box">{{ editor.standardName || '—' }}</view></view>
+        <view class="field"><text class="field-label">默认显示名称</text><view class="select-box">{{ editor.defaultDisplayName || editor.name }}</view></view>
+        <view class="field"><text class="field-label">默认记录方式</text><view class="tag-editor"><view v-for="key in editor.recordMethods" :key="key" class="chain-item"><view class="chain-node"/><text>{{ recordMethodName(key) }}</text></view></view></view>
+        <view class="field"><text class="field-label">主要肌群</text><view class="tag-editor"><view v-for="key in editor.primaryMuscles" :key="key" class="chain-item muscle-chain"><view class="chain-node"/><text>{{ muscleName(key) }}</text></view></view></view>
+        <view v-if="editor.variants.length" class="field"><text class="field-label">动作变式</text><view class="tag-editor"><view v-for="variant in editor.variants" :key="variant.id" class="chain-item variant-chain"><view class="chain-node"/><text>{{ variant.name }}</text></view></view></view>
         <view class="editor-actions single"><button class="save-button" :disabled="mutating" @tap="saveEditor">{{ mutating?'保存中…':'保存' }}</button></view>
         </view>
       </scroll-view>
@@ -118,7 +78,7 @@
 <script setup>
 import { computed, reactive, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { createExercise, deleteExercise, getExercises, updateExercise } from '../../api/exercises'
+import { addExerciseToLibrary, deleteExercise, getExercises, updateExercise } from '../../api/exercises'
 import {
   bodyPartOptions,recordMethodOptions,equipmentOptions,muscleOptions,
   bodyPartName,recordMethodName,equipmentName,muscleName,pinyinInitial,compareExerciseName
@@ -145,11 +105,12 @@ function normalizeAction(action){
   const variants=list(action.variants).map((variant,index)=>({id:variant.id||'variant_'+index,name:variant.name||'未命名变式',primaryMuscles:list(variant.primaryMuscles),secondaryMuscles:list(variant.secondaryMuscles)}))
   return{...action,bodyParts,recordMethods:list(action.recordMethods).length?list(action.recordMethods):['weight','reps'],primaryMuscles:primary,secondaryMuscles:list(action.secondaryMuscles),variants,equipment:action.equipment||'other'}
 }
-function emptyEditor(){return{id:null,name:'',bodyParts:[],recordMethods:['weight','reps'],primaryMuscles:[],secondaryMuscles:[],variants:[],equipment:'other',version:0}}
+function emptyEditor(){return{id:null,name:'',standardName:'',defaultDisplayName:'',personalDisplayName:'',bodyParts:[],recordMethods:['weight','reps'],primaryMuscles:[],secondaryMuscles:[],variants:[],equipment:'other',version:0}}
 function assignEditor(value){Object.assign(editor,emptyEditor(),value||{})}
 function actionMatches(action,skip=''){
   const word=keyword.value.trim().toLocaleLowerCase()
-  if(word&&!action.name.toLocaleLowerCase().includes(word))return false
+  const names=[action.name,action.standardName,action.defaultDisplayName,...list(action.aliases)].filter(Boolean).map(value=>String(value).toLocaleLowerCase())
+  if(word&&!names.some(value=>value.includes(word)))return false
   if(skip!=='part'&&filters.part&&!action.bodyParts.includes(filters.part))return false
   if(skip!=='muscle'&&filters.muscle&&![...action.primaryMuscles,...action.secondaryMuscles].includes(filters.muscle))return false
   if(skip!=='equipment'&&filters.equipment&&action.equipment!==filters.equipment)return false
@@ -173,7 +134,7 @@ const availableBodyParts=computed(()=>bodyPartOptions.filter(item=>!editor.bodyP
 const availableRecordMethods=computed(()=>recordMethodOptions.filter(item=>!editor.recordMethods.includes(item.key)))
 const availablePrimaryMuscles=computed(()=>relevantMuscles.value.filter(item=>!editor.primaryMuscles.includes(item.key)&&!editor.secondaryMuscles.includes(item.key)))
 const availableSecondaryMuscles=computed(()=>relevantMuscles.value.filter(item=>!editor.primaryMuscles.includes(item.key)&&!editor.secondaryMuscles.includes(item.key)))
-const catalogResults=computed(()=>{const word=catalogKeyword.value.trim().toLocaleLowerCase();return catalogActions.value.filter(action=>!word||action.name.toLocaleLowerCase().includes(word)||actionDescription(action).includes(word)).sort(compareExerciseName)})
+const catalogResults=computed(()=>{const word=catalogKeyword.value.trim().toLocaleLowerCase();return catalogActions.value.filter(action=>{const terms=[action.name,action.standardName,action.defaultDisplayName,...list(action.aliases)].filter(Boolean).map(value=>String(value).toLocaleLowerCase());return!word||terms.some(value=>value.includes(word))||actionDescription(action).includes(word)}).sort(compareExerciseName)})
 
 function selectedFilterLabel(type){const map={part:[bodyPartOptions,filters.part,'部位'],muscle:[muscleOptions,filters.muscle,'肌群'],equipment:[equipmentOptions,filters.equipment,'器械']},[options,key,fallback]=map[type];return options.find(item=>item.key===key)?.name||fallback}
 function keepValidFilters(){if(filters.muscle&&!muscleFilterOptions.value.some(item=>item.key===filters.muscle))filters.muscle='';if(filters.equipment&&!equipmentFilterOptions.value.some(item=>item.key===filters.equipment))filters.equipment=''}
@@ -187,21 +148,21 @@ async function loadExercises(){
   if(loading.value)return
   loading.value=true;loadError.value=''
   try{
-    const items=[],query={page:1,pageSize:100}
-    for(;;){const result=await getExercises(query);items.push(...(Array.isArray(result?.items)?result.items:[]));if(!result?.hasMore)break;query.page+=1}
-    actions.value=items.filter(item=>item.isSystem===false).map(normalizeAction)
-    catalogActions.value=items.filter(item=>item.isSystem===true).map(normalizeAction)
+    const loadScope=async scope=>{const items=[],query={scope,page:1,pageSize:100};for(;;){const result=await getExercises(query);items.push(...(Array.isArray(result?.items)?result.items:[]));if(!result?.hasMore)break;query.page+=1}return items.map(normalizeAction)}
+    const [library,catalog]=await Promise.all([loadScope('library'),loadScope('catalog')])
+    actions.value=library
+    catalogActions.value=catalog
   }catch(error){showError(error,'动作库加载失败')}finally{loading.value=false}
 }
-function openAddMenu(){uni.showActionSheet({itemList:['从动作目录选取','自行添加动作'],success:({tapIndex})=>{if(tapIndex===0){catalogKeyword.value='';libraryVisible.value=true}else openEditor()}})}
-function isPicked(catalog){return actions.value.some(item=>item.name.trim().toLocaleLowerCase()===catalog.name.trim().toLocaleLowerCase())}
+function openAddMenu(){catalogKeyword.value='';libraryVisible.value=true}
+function isPicked(catalog){return actions.value.some(item=>item.id===catalog.id)}
 async function pickCatalogAction(catalog){
   if(isPicked(catalog)||mutating.value)return
   mutating.value=true
-  try{const result=await createExercise(exercisePayload(catalog),'exercise-pick-'+Date.now()+'-'+Math.random().toString(36).slice(2,8));const created=normalizeAction(result?.exercise||result);actions.value.push(created);uni.showToast({title:'已加入动作库',icon:'success'})}
+  try{const created=normalizeAction(await addExerciseToLibrary(catalog.id));actions.value.push(created);catalogActions.value=catalogActions.value.map(item=>item.id===created.id?created:item);uni.showToast({title:'已加入动作库',icon:'success'})}
   catch(error){showError(error,'动作选取失败')}finally{mutating.value=false}
 }
-function openEditor(action=null){advancedOpen.value=!!action;assignEditor(action?normalizeAction(action):emptyEditor());editorVisible.value=true}
+function openEditor(action){if(!action)return;advancedOpen.value=false;assignEditor(normalizeAction(action));editorVisible.value=true}
 function closeEditor(){if(!mutating.value)editorVisible.value=false}
 function addTagFromPicker(field,options,event){const item=options[Number(event.detail.value)];if(item&&!editor[field].includes(item.key))editor[field].push(item.key)}
 function removeTag(field,key){editor[field]=editor[field].filter(item=>item!==key);if(field==='bodyParts'){const allowed=new Set(relevantMuscles.value.map(item=>item.key));editor.primaryMuscles=editor.primaryMuscles.filter(item=>allowed.has(item));editor.secondaryMuscles=editor.secondaryMuscles.filter(item=>allowed.has(item))}}
@@ -220,17 +181,14 @@ function applyVariant(variant){editor.primaryMuscles=[...variant.primaryMuscles]
 function removeVariant(id){editor.variants=editor.variants.filter(item=>item.id!==id)}
 function exercisePayload(action){return{name:action.name.trim(),bodyParts:[...action.bodyParts],recordMethods:[...action.recordMethods],primaryMuscles:[...action.primaryMuscles],secondaryMuscles:[...action.secondaryMuscles],variants:action.variants.map(item=>({id:item.id,name:item.name,primaryMuscles:[...item.primaryMuscles],secondaryMuscles:[...item.secondaryMuscles]})),equipment:action.equipment}}
 async function saveEditor(){
-  if(!editor.name.trim()){uni.showToast({title:'请输入动作名称',icon:'none'});return}
-  if(!editor.bodyParts.length){uni.showToast({title:'至少选择一个训练部位',icon:'none'});return}
-  if(!editor.recordMethods.length){uni.showToast({title:'至少选择一种记录方式',icon:'none'});return}
+  const displayName=String(editor.personalDisplayName||'').trim()||null
   mutating.value=true
   try{
-    if(editor.id){const updated=normalizeAction(await updateExercise(editor.id,{...exercisePayload(editor),version:editor.version}));actions.value=actions.value.map(item=>item.id===updated.id?updated:item)}
-    else{const result=await createExercise(exercisePayload(editor),'exercise-'+Date.now()+'-'+Math.random().toString(36).slice(2,8));actions.value.push(normalizeAction(result?.exercise||result))}
+    const updated=normalizeAction(await updateExercise(editor.id,{displayName,version:editor.version}));actions.value=actions.value.map(item=>item.id===updated.id?updated:item);catalogActions.value=catalogActions.value.map(item=>item.id===updated.id?updated:item)
     editorVisible.value=false;uni.showToast({title:'保存成功',icon:'success'})
   }catch(error){showError(error,'动作保存失败')}finally{mutating.value=false}
 }
-function removeAction(action){uni.showModal({title:'删除“'+action.name+'”？',content:'已完成训练中的动作快照不会受影响。',success:async result=>{if(!result.confirm)return;mutating.value=true;try{await deleteExercise(action.id);actions.value=actions.value.filter(item=>item.id!==action.id);uni.showToast({title:'已删除',icon:'success'})}catch(error){showError(error,'动作删除失败')}finally{mutating.value=false}}})}
+function removeAction(action){uni.showModal({title:'移出“'+action.name+'”？',content:'只会从个人动作列表移除；系统动作本体、已有计划和历史快照不受影响。',success:async result=>{if(!result.confirm)return;mutating.value=true;try{await deleteExercise(action.id);actions.value=actions.value.filter(item=>item.id!==action.id);catalogActions.value=catalogActions.value.map(item=>item.id===action.id?{...item,inLibrary:false,personalDisplayName:null,name:item.defaultDisplayName}:item);uni.showToast({title:'已移出',icon:'success'})}catch(error){showError(error,'移出动作失败')}finally{mutating.value=false}}})}
 function syncTheme(){const value=Number(uni.getStorageSync(THEME_STORAGE_KEY));if(Number.isInteger(value)&&themes[value])themeIndex.value=value}
 function goBack(){uni.navigateBack({fail:()=>uni.reLaunch({url:'/pages/home/home'})})}
 onShow(()=>{syncTheme();loadExercises()})

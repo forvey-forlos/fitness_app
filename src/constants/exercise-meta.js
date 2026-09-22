@@ -6,7 +6,9 @@ export const bodyPartOptions=[
 
 export const recordMethodOptions=[
   {key:'weight',name:'重量'},{key:'reps',name:'次数'},{key:'distance',name:'距离'},
-  {key:'duration',name:'持续时间'},{key:'incline',name:'坡度'},{key:'angle',name:'角度'},{key:'other',name:'其他'}
+  {key:'duration',name:'持续时间'},{key:'speed',name:'速度'},{key:'incline',name:'坡度'},
+  {key:'assistance_weight',name:'辅助重量'},{key:'rir',name:'RIR'},{key:'rpe',name:'RPE'},
+  {key:'angle',name:'角度'},{key:'other',name:'其他'}
 ]
 
 export const equipmentOptions=[

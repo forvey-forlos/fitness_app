@@ -1,147 +1,111 @@
 const pool = require('../config/db')
 
 const selectColumns = [
-  'id, owner_user_id, name, name_normalized, body_parts, record_methods,',
-  'category, muscle_group, primary_muscles, secondary_muscles, variants, equipment, sort_order,',
-  'is_system, version, request_hash, deleted_at,',
-  "DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS created_at,",
-  "DATE_FORMAT(updated_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS updated_at"
+  'e.id, e.owner_user_id, e.name, e.name_normalized, e.standard_name_en,',
+  'e.default_display_name_zh, e.default_display_name_normalized, e.body_parts, e.record_methods,',
+  'e.category, e.muscle_group, e.primary_muscles, e.secondary_muscles, e.equipment,',
+  'e.movement_type, e.sort_order, e.is_system, e.version, e.deleted_at,',
+  'p.display_name AS personal_display_name, p.version AS preference_version,',
+  'CASE WHEN p.user_id IS NULL THEN 0 ELSE 1 END AS in_library,',
+  'COALESCE(NULLIF(p.display_name,\'\'), e.default_display_name_zh, e.name) AS resolved_name,',
+  '(SELECT JSON_ARRAYAGG(a.alias) FROM exercise_aliases a WHERE a.exercise_id=e.id) AS aliases,',
+  `(SELECT JSON_ARRAYAGG(JSON_OBJECT('id',v.id,'code',v.variant_code,
+    'name',v.default_display_name_zh,'standardName',v.standard_name_en,
+    'primaryMuscles',v.primary_muscles,'secondaryMuscles',v.secondary_muscles))
+    FROM exercise_variants v WHERE v.exercise_id=e.id AND v.deleted_at IS NULL) AS normalized_variants,`,
+  "DATE_FORMAT(e.created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS created_at,",
+  "DATE_FORMAT(e.updated_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS updated_at"
 ].join(' ')
+
+function joins() {
+  return 'LEFT JOIN user_exercise_preferences p ON p.exercise_id=e.id AND p.user_id=? AND p.deleted_at IS NULL'
+}
 
 async function findVisibleById(userId, id) {
   const [rows] = await pool.execute(
-    ['SELECT', selectColumns, 'FROM exercises WHERE id = ? AND deleted_at IS NULL',
-      'AND ((is_system = 1 AND owner_user_id IS NULL)',
-      'OR (is_system = 0 AND owner_user_id = ?)) LIMIT 1'].join(' '),
-    [id, userId]
-  )
-  return rows[0] || null
-}
-
-async function findByNormalizedName(userId, category, normalized) {
-  const [rows] = await pool.execute(
-    ['SELECT id FROM exercises WHERE owner_user_id = ? AND is_system = 0',
-      'AND category = ? AND name_normalized = ? AND deleted_at IS NULL LIMIT 1'].join(' '),
-    [userId, category, normalized]
-  )
-  return rows[0] || null
-}
-
-async function findByIdempotencyKey(userId, key) {
-  const [rows] = await pool.execute(
-    ['SELECT', selectColumns,
-      'FROM exercises WHERE owner_user_id = ? AND is_system = 0',
-      'AND idempotency_key = ? LIMIT 1'].join(' '),
-    [userId, key]
+    ['SELECT', selectColumns, 'FROM exercises e', joins(),
+      'WHERE e.id=? AND e.deleted_at IS NULL AND ((e.is_system=1 AND e.owner_user_id IS NULL)',
+      'OR (e.is_system=0 AND e.owner_user_id=?)) LIMIT 1'].join(' '),
+    [userId, id, userId]
   )
   return rows[0] || null
 }
 
 async function list(userId, filters) {
-  const conditions = [
-    'deleted_at IS NULL',
-    '((is_system = 1 AND owner_user_id IS NULL) OR (is_system = 0 AND owner_user_id = ?))'
-  ]
+  const conditions = ['e.deleted_at IS NULL', 'e.is_system=1', 'e.owner_user_id IS NULL']
   const params = [userId]
-  for (const [key, column] of [
-    ['category', 'category'], ['muscleGroup', 'muscle_group'], ['equipment', 'equipment']
-  ]) {
-    if (filters[key] !== undefined) {
-      conditions.push(column + ' = ?')
-      params.push(filters[key])
-    }
+  if (filters.scope === 'library') conditions.push('p.user_id IS NOT NULL')
+  if (filters.category !== undefined) { conditions.push('e.category=?'); params.push(filters.category) }
+  if (filters.muscleGroup !== undefined) {
+    conditions.push('(e.muscle_group=? OR EXISTS (SELECT 1 FROM exercise_muscles em WHERE em.exercise_id=e.id AND em.muscle_id=?))')
+    params.push(filters.muscleGroup, filters.muscleGroup)
   }
+  if (filters.equipment !== undefined) { conditions.push('e.equipment=?'); params.push(filters.equipment) }
   if (filters.keyword !== undefined) {
-    conditions.push('INSTR(name_normalized, ?) > 0')
-    params.push(filters.keyword)
+    conditions.push(`(INSTR(e.name_normalized,?)>0 OR INSTR(e.default_display_name_normalized,?)>0
+      OR INSTR(LOWER(e.standard_name_en),?)>0 OR INSTR(COALESCE(p.display_name_normalized,''),?)>0
+      OR EXISTS (SELECT 1 FROM exercise_aliases a WHERE a.exercise_id=e.id AND INSTR(a.alias_normalized,?)>0))`)
+    params.push(filters.keyword, filters.keyword, filters.keyword, filters.keyword, filters.keyword)
   }
+  const from = ['FROM exercises e', joins()].join(' ')
   const where = 'WHERE ' + conditions.join(' AND ')
-  const [countRows] = await pool.execute('SELECT COUNT(*) AS total FROM exercises ' + where, params)
+  const [countRows] = await pool.execute(`SELECT COUNT(*) AS total ${from} ${where}`, params)
   const [rows] = await pool.execute(
-    ['SELECT', selectColumns, 'FROM exercises', where,
-      "ORDER BY FIELD(category, 'shoulder', 'chest', 'back', 'arms', 'abs', 'legs'),",
-      'is_system DESC, sort_order ASC, name_normalized ASC, id ASC',
-      'LIMIT ? OFFSET ?'].join(' '),
+    ['SELECT', selectColumns, from, where,
+      "ORDER BY FIELD(e.category,'shoulder','chest','back','arms','abs','legs'),",
+      'e.sort_order ASC, e.default_display_name_normalized ASC, e.id ASC LIMIT ? OFFSET ?'].join(' '),
     [...params, filters.pageSize, (filters.page - 1) * filters.pageSize]
   )
   return { rows, total: Number(countRows[0].total) }
 }
 
+async function addToLibrary(userId, exerciseId) {
+  await pool.execute(
+    `INSERT INTO user_exercise_preferences (user_id,exercise_id,version,created_at,updated_at,deleted_at)
+     SELECT ?,e.id,1,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3),NULL FROM exercises e
+     WHERE e.id=? AND e.is_system=1 AND e.owner_user_id IS NULL AND e.deleted_at IS NULL
+     ON DUPLICATE KEY UPDATE deleted_at=NULL,version=version+1,updated_at=UTC_TIMESTAMP(3)`,
+    [userId, exerciseId]
+  )
+}
+
+async function findVariant(exerciseId, variantId) {
+  const [rows] = await pool.execute(
+    `SELECT id,exercise_id,variant_code,standard_name_en,default_display_name_zh,
+       primary_muscles,secondary_muscles
+     FROM exercise_variants WHERE id=? AND exercise_id=? AND deleted_at IS NULL LIMIT 1`,
+    [variantId, exerciseId]
+  )
+  return rows[0] || null
+}
+
+async function updatePreference(userId, exerciseId, version, displayName, displayNameNormalized) {
+  const [result] = await pool.execute(
+    `UPDATE user_exercise_preferences SET display_name=?,display_name_normalized=?,
+       version=version+1,updated_at=UTC_TIMESTAMP(3)
+     WHERE user_id=? AND exercise_id=? AND version=? AND deleted_at IS NULL`,
+    [displayName, displayNameNormalized, userId, exerciseId, version]
+  )
+  return result.affectedRows === 1
+}
+
+async function removeFromLibrary(userId, exerciseId) {
+  const [result] = await pool.execute(
+    `UPDATE user_exercise_preferences SET deleted_at=UTC_TIMESTAMP(3),version=version+1,updated_at=UTC_TIMESTAMP(3)
+     WHERE user_id=? AND exercise_id=? AND deleted_at IS NULL`, [userId, exerciseId]
+  )
+  return result.affectedRows === 1
+}
+
 async function countVisibleByCategory(userId) {
   const [rows] = await pool.execute(
-    ['SELECT category,',
-      'SUM(CASE WHEN is_system = 1 THEN 1 ELSE 0 END) AS system_count,',
-      'SUM(CASE WHEN is_system = 0 THEN 1 ELSE 0 END) AS custom_count',
-      'FROM exercises WHERE deleted_at IS NULL',
-      'AND ((is_system = 1 AND owner_user_id IS NULL)',
-      'OR (is_system = 0 AND owner_user_id = ?))',
-      'GROUP BY category'].join(' '),
-    [userId]
+    `SELECT e.category,COUNT(*) AS system_count,
+       SUM(CASE WHEN p.user_id IS NULL THEN 0 ELSE 1 END) AS selected_count
+     FROM exercises e LEFT JOIN user_exercise_preferences p
+       ON p.exercise_id=e.id AND p.user_id=? AND p.deleted_at IS NULL
+     WHERE e.deleted_at IS NULL AND e.is_system=1 AND e.owner_user_id IS NULL GROUP BY e.category`, [userId]
   )
   return rows
 }
 
-async function create(record) {
-  await pool.execute(
-    ['INSERT INTO exercises',
-      '(id, owner_user_id, name, name_normalized, body_parts, record_methods,',
-      'category, muscle_group, primary_muscles, secondary_muscles, variants, equipment, sort_order,',
-      'is_system, idempotency_key, request_hash, version, created_at, updated_at)',
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 1, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))'].join(' '),
-    [record.id, record.ownerUserId, record.name, record.nameNormalized,
-      JSON.stringify(record.bodyParts), JSON.stringify(record.recordMethods),
-      record.category, record.muscleGroup, JSON.stringify(record.primaryMuscles),
-      JSON.stringify(record.secondaryMuscles), JSON.stringify(record.variants),
-      record.equipment, record.sortOrder,
-      record.idempotencyKey, record.requestHash]
-  )
-}
-
-async function update(userId, id, version, changes) {
-  const assignments = []
-  const params = []
-  for (const [key, column] of [
-    ['name', 'name'], ['nameNormalized', 'name_normalized'],
-    ['category', 'category'], ['muscleGroup', 'muscle_group'],
-    ['equipment', 'equipment'], ['sortOrder', 'sort_order']
-  ]) {
-    if (changes[key] !== undefined) {
-      assignments.push(column + ' = ?')
-      params.push(changes[key])
-    }
-  }
-  for (const [key, column] of [
-    ['bodyParts', 'body_parts'], ['recordMethods', 'record_methods'],
-    ['primaryMuscles', 'primary_muscles'], ['secondaryMuscles', 'secondary_muscles'],
-    ['variants', 'variants']
-  ]) {
-    if (changes[key] !== undefined) {
-      assignments.push(column + ' = ?')
-      params.push(JSON.stringify(changes[key]))
-    }
-  }
-  const [result] = await pool.execute(
-    ['UPDATE exercises SET', assignments.join(', '),
-      ', version = version + 1, updated_at = UTC_TIMESTAMP(3)',
-      'WHERE id = ? AND owner_user_id = ? AND is_system = 0',
-      'AND version = ? AND deleted_at IS NULL'].join(' '),
-    [...params, id, userId, version]
-  )
-  return result.affectedRows > 0
-}
-
-async function softDelete(userId, id, version) {
-  const [result] = await pool.execute(
-    ['UPDATE exercises SET deleted_at = UTC_TIMESTAMP(3),',
-      'updated_at = UTC_TIMESTAMP(3), version = version + 1',
-      'WHERE id = ? AND owner_user_id = ? AND is_system = 0',
-      'AND version = ? AND deleted_at IS NULL'].join(' '),
-    [id, userId, version]
-  )
-  return result.affectedRows > 0
-}
-
-module.exports = {
-  findVisibleById, findByNormalizedName, findByIdempotencyKey,
-  list, countVisibleByCategory, create, update, softDelete
-}
+module.exports = { findVisibleById, findVariant, list, addToLibrary, updatePreference, removeFromLibrary, countVisibleByCategory }

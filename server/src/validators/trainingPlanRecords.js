@@ -1,5 +1,6 @@
 const { HttpError } = require('../utils/response')
 const { validDate } = require('../utils/bodyTime')
+const { bodyParts, recordMethods } = require('../constants/exerciseMetadata')
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -15,6 +16,27 @@ function validWeight(value) {
   return value === null || (typeof value === 'number' && Number.isFinite(value) &&
     value >= 0 && value <= 1000 &&
     Math.abs(value * 100 - Math.round(value * 100)) < 1e-7)
+}
+
+function validMetricValue(method, value, nullable = true) {
+  if (value === null && nullable) return true
+  if (typeof value !== 'number' || !Number.isFinite(value)) return false
+  if (method === 'reps') return Number.isInteger(value) && value >= 0 && value <= 10000
+  const ranges = { weight: [0, 1000], distance: [0, 1000000], duration: [0, 1440], speed: [0, 500], incline: [0, 100], assistance_weight: [0, 1000], rir: [0, 10], rpe: [0, 10], angle: [0, 360], other: [0, 1000000] }
+  const range = ranges[method]
+  return Boolean(range) && value >= range[0] && value <= range[1]
+}
+
+function validMetricObject(value, methods, nullable = true) {
+  return value && typeof value === 'object' && !Array.isArray(value) &&
+    Object.keys(value).length === methods.length &&
+    methods.every((method) => Object.hasOwn(value, method) && validMetricValue(method, value[method], nullable))
+}
+
+function validGroups(value, methods, nullable = true) {
+  return Array.isArray(value) && value.length >= 1 && value.length <= 100 && value.every((group) =>
+    group && typeof group === 'object' && !Array.isArray(group) &&
+    Object.keys(group).every((key) => key === 'values') && validMetricObject(group.values, methods, nullable))
 }
 
 function validateWrite(req, res, next, update = false) {
@@ -52,11 +74,19 @@ function validateWrite(req, res, next, update = false) {
         return
       }
       for (const key of Object.keys(item)) {
-        if (!['exerciseId', 'sets', 'reps', 'weight', 'actual', 'restSeconds', 'notes', 'sortOrder'].includes(key)) {
+        if (!['exerciseId', 'variantId', 'bodyPart', 'recordMethods', 'targetMetrics', 'actualGroups', 'sets', 'reps', 'weight', 'actual', 'restSeconds', 'notes', 'sortOrder'].includes(key)) {
           errors.push({ field: prefix + '.' + key, message: '不支持的字段' })
         }
       }
       if (!uuidPattern.test(item.exerciseId || '')) errors.push({ field: prefix + '.exerciseId', message: '动作 ID 不合法' })
+      if (item.variantId !== undefined && item.variantId !== null && !uuidPattern.test(item.variantId)) errors.push({ field: prefix + '.variantId', message: '动作变式 ID 不合法' })
+      if (item.bodyPart !== undefined && !bodyParts.includes(item.bodyPart)) errors.push({ field: prefix + '.bodyPart', message: '训练部位不合法' })
+      const methods = item.recordMethods === undefined ? null : item.recordMethods
+      if (methods && (!Array.isArray(methods) || !methods.length || methods.length > recordMethods.length || new Set(methods).size !== methods.length || methods.some((method) => !recordMethods.includes(method)))) {
+        errors.push({ field: prefix + '.recordMethods', message: '记录方式不合法' })
+      }
+      if (methods && !validMetricObject(item.targetMetrics, methods, true)) errors.push({ field: prefix + '.targetMetrics', message: '计划指标与记录方式不匹配' })
+      if (methods && !validGroups(item.actualGroups, methods, true)) errors.push({ field: prefix + '.actualGroups', message: '实际组数据与记录方式不匹配' })
       if (!Number.isInteger(item.sortOrder) || item.sortOrder < 1 || item.sortOrder > 1000 ||
           orders.has(item.sortOrder)) {
         errors.push({ field: prefix + '.sortOrder', message: '排序号须为不重复的正整数' })
@@ -104,6 +134,11 @@ function validateWrite(req, res, next, update = false) {
     durationMinutes: body.durationMinutes ?? null,
     exercises: body.exercises.map((item) => ({
       exerciseId: item.exerciseId,
+      variantId: item.variantId ?? null,
+      bodyPart: item.bodyPart ?? null,
+      recordMethods: item.recordMethods ?? null,
+      targetMetrics: item.targetMetrics ?? null,
+      actualGroups: item.actualGroups ?? null,
       sets: item.sets ?? null,
       reps: item.reps ?? null,
       weight: item.weight ?? null,

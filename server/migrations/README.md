@@ -166,3 +166,20 @@ The legacy `username` columns remain as internal compatibility identifiers.
 
 Verify with `SHOW CREATE TABLE users`, `SHOW CREATE TABLE wechat_accounts`, and
 `SHOW CREATE TABLE user_avatars`. Do not rerun 012 after it succeeds.
+
+## Exercise metadata, normalized catalog, and dynamic training sets (013–016)
+
+Run these migrations in order before deploying the matching exercise/training backend. Migration 015 adds the plan and history JSON snapshots used by per-action recording methods and dynamic set rows.
+
+    mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p "$DB_NAME" < server/migrations/013_expand_exercise_metadata.sql
+    mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p "$DB_NAME" < server/migrations/014_add_exercise_variants.sql
+    mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p "$DB_NAME" < server/migrations/015_add_dynamic_training_sets.sql
+    mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p "$DB_NAME" < server/migrations/016_normalize_exercise_catalog.sql
+    mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p "$DB_NAME" < server/seeds/002_standard_exercise_catalog.sql
+
+Migrations 015 and 016 are one-time DDL migrations. Back up and inspect the
+schema before running them; do not rerun either migration after success. Seed
+002 is repeatable. Migration 016 adds normalized aliases, variants and muscles,
+the per-user exercise preference/library table, plan variant selection, and
+history name/variant/muscle snapshots. Deploy the matching backend only after
+016 and seed 002 both succeed.

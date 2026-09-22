@@ -2,6 +2,12 @@ const { createHash, randomUUID } = require('node:crypto')
 const { HttpError } = require('../utils/response')
 const { localDate, shiftDate, startOfLocalDate, sqlUtc, readUtc } = require('../utils/bodyTime')
 
+function readJson(value, fallback) {
+  if (value === null || value === undefined) return fallback
+  if (typeof value === 'object') return value
+  try { return JSON.parse(value) } catch (_) { return fallback }
+}
+
 function presentSession(row) {
   return {
     id: row.id, trainingPlanId: row.training_plan_id,
@@ -24,13 +30,20 @@ function presentExercise(row) {
     reps: row.actual_reps, sets: row.actual_sets
   }
   return {
-    id: row.id, exerciseId: row.exercise_id,
+    id: row.id, exerciseId: row.exercise_id, variantId: row.exercise_variant_id,
     exerciseNameSnapshot: row.exercise_name_snapshot,
+    exerciseVariantNameSnapshot: row.exercise_variant_name_snapshot,
     categorySnapshot: row.category_snapshot,
     muscleGroupSnapshot: row.muscle_group_snapshot,
     equipmentSnapshot: row.equipment_snapshot,
+    primaryMusclesSnapshot: readJson(row.primary_muscles_snapshot, []),
+    secondaryMusclesSnapshot: readJson(row.secondary_muscles_snapshot, []),
     sortOrder: row.sort_order, sets: row.sets, reps: row.reps,
     weight: target.kg, target, actual,
+    bodyPart: row.body_part_snapshot || row.category_snapshot,
+    recordMethods: readJson(row.record_methods, ['weight', 'reps']),
+    targetMetrics: readJson(row.target_metrics, { weight: target.kg, reps: target.reps }),
+    actualGroups: readJson(row.actual_groups, []),
     restSeconds: row.rest_seconds, notes: row.notes
   }
 }
@@ -121,7 +134,7 @@ function createTrainingSessionsService(options = {}) {
       const user = await activeUser(userId)
       const hash = createHash('sha256').update(JSON.stringify({
         planId, version: input.version, startedAt: input.startedAt,
-        completedAt: input.completedAt, exercises: input.exercises
+        completedAt: input.completedAt, durationMinutes: input.durationMinutes, exercises: input.exercises
       })).digest('hex')
       const prior = await repository.findByKey(userId, input.idempotencyKey)
       if (prior) return replay(userId, planId, input.idempotencyKey, hash, prior, user)
@@ -147,19 +160,23 @@ function createTrainingSessionsService(options = {}) {
           if (!items.length) {
             throw new HttpError(422, 'BUSINESS_RULE_ERROR', '训练计划至少需要一个动作才能完成')
           }
-          const actualById = new Map(input.exercises.map((item) => [item.exerciseId, item.actual]))
+          const actualById = new Map(input.exercises.map((item) => [item.exerciseId, item]))
           if (actualById.size !== items.length || items.some((item) => !actualById.has(item.exercise_id))) {
             throw new HttpError(422, 'PLAN_ACTION_INCOMPLETE', '实际数据必须与计划中的动作完全一致')
           }
           const snapshots = items.map((item) => {
-            const actual = actualById.get(item.exercise_id)
+            const completed = actualById.get(item.exercise_id)
+            const actual = completed.actual
             return { ...item, id: randomUUID(), actual_sets: actual.sets,
-              actual_reps: actual.reps, actual_weight: actual.kg }
+              actual_reps: actual.reps, actual_weight: actual.kg,
+              record_methods: completed.recordMethods || readJson(item.record_methods, null),
+              actual_groups: completed.actualGroups || readJson(item.actual_groups, null),
+              target_metrics: readJson(item.target_metrics, null) }
           })
           const planSnapshot = { ...plan }
           await tx.insertSession({
             id: recordId, userId, planId, planDate: plan.plan_date,
-            name: plan.name, durationMinutes: plan.duration_minutes,
+            name: plan.name, durationMinutes: input.durationMinutes || plan.duration_minutes,
             planVersion: plan.version + 1,
             startedAt: startedAt ? sqlUtc(startedAt) : null,
             completedAt: sqlUtc(completedAt), key: input.idempotencyKey, hash
@@ -206,6 +223,11 @@ function createTrainingSessionsService(options = {}) {
     async get(userId, id) {
       await activeUser(userId)
       return detail(userId, id)
+    },
+    async remove(userId, id) {
+      await activeUser(userId)
+      if (!await repository.softDelete(userId, id)) throw new HttpError(404, 'NOT_FOUND', '训练历史不存在')
+      return { id, deleted: true }
     },
     async weekly(userId, weekStart, requestedTimezone) {
       const user = await activeUser(userId)

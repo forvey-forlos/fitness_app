@@ -9,9 +9,11 @@ function createTrainingSessionsRoutes(service, authenticate = createAuthMiddlewa
   router.post('/training-plans/:id/complete', authenticate, validateId, validateComplete, controller.complete)
   router.get('/training-history', authenticate, validateList, controller.list)
   router.get('/training-history/:id', authenticate, validateId, controller.get)
+  router.delete('/training-history/:id', authenticate, validateId, controller.remove)
   router.get('/training-stats/week', authenticate, validateWeek, controller.weekly)
   router.get('/training-records', authenticate, validateList, controller.list)
   router.get('/training-records/:id', authenticate, validateId, controller.get)
+  router.delete('/training-records/:id', authenticate, validateId, controller.remove)
   router.get('/training-stats/weekly', authenticate, validateWeek, controller.weekly)
   return router
 }

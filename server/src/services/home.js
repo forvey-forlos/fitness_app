@@ -14,16 +14,23 @@ function librarySummary(rows) {
   const partCounts = {}
   let systemCount = 0
   let customCount = 0
+  let selectedCount = 0
   for (const row of rows) {
     const system = Number(row.system_count)
-    const custom = Number(row.custom_count)
+    const normalizedCatalog = row.selected_count !== undefined
+    const selected = Number(normalizedCatalog ? row.selected_count : row.custom_count)
+    const custom = Number(normalizedCatalog ? 0 : row.custom_count)
     systemCount += system
     customCount += custom
-    partCounts[row.category] = system + custom
+    selectedCount += selected
+    partCounts[row.category] = normalizedCatalog ? selected : system + custom
   }
   return {
-    systemCount, customCount, totalCount: systemCount + customCount,
-    activePartCount: Object.keys(partCounts).length, partCounts
+    systemCount, customCount, selectedCount,
+    totalCount: rows.some((row) => row.selected_count !== undefined)
+      ? selectedCount : systemCount + customCount,
+    activePartCount: Object.values(partCounts).filter((count) => count > 0).length,
+    partCounts
   }
 }
 

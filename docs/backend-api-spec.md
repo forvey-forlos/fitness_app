@@ -464,9 +464,27 @@ BMI 建议由后端根据最新身高和体重计算：`weightKg / (heightM²)`�
 
 ## 8. 动作目录与用户动作库
 
-系统动作目录是平台维护的只读数据；用户动作库是用户从系统目录选取或自行创建的动作集合。两者分离可以避免系统动作升级影响用户历史。
+系统动作目录是平台维护的只读数据。当前正式实现不允许用户创建新的动作
+本体；用户动作库保存的是系统动作的个人选取状态和个人显示名称。计划和
+历史始终使用固定的 `exerciseId`，别名和显示名称只用于搜索或展示。
 
-### 8.1 获取系统动作目录
+当前正式接口如下；本节后方未带 `/api/v1` 的目录/用户动作双表方案仅为
+早期设计草案，不作为当前实现依据：
+
+- `GET /api/v1/exercises?scope=catalog|library&category=&muscleGroup=&equipment=&keyword=&page=1&pageSize=20`
+- `GET /api/v1/exercises/{exerciseId}`
+- `POST /api/v1/exercises/{exerciseId}/library`：加入个人库，客户端不提交动作本体字段
+- `PATCH /api/v1/exercises/{exerciseId}`：只接收 `{ displayName, version }`；`displayName: null` 恢复默认名
+- `DELETE /api/v1/exercises/{exerciseId}`：只移出个人库，不删除系统动作
+- `POST /api/v1/exercises`：当前返回 `CUSTOM_EXERCISES_DISABLED`
+
+返回动作的 `id` 就是稳定的系统 `exerciseId`。`name` 是已经解析的当前
+显示名，优先级为个人显示名、默认中文名；同时返回 `standardName`、
+`defaultDisplayName`、`personalDisplayName`、`aliases`、
+`recordMethods`、`primaryMuscles`、`secondaryMuscles` 和嵌套
+`variants`。主列表只返回主动作，不把变式展开成独立动作。
+
+### 8.1 早期目录草案（已由上述正式接口取代）
 
 `GET /exercise-catalog?bodyPart=chest&keyword=卧推&page=1&pageSize=50`
 
@@ -627,6 +645,28 @@ BMI 建议由后端根据最新身高和体重计算：`weightKg / (heightM²)`�
 - 服务端应重新生成名称，不能完全信任客户端传入的 name。
 - 当前预计时长规则为 `max(20, 动作数 × 8)` 分钟，后续可改成用户输入。
 
+当前正式接口以计划 ID 为路径参数。动作项除兼容字段 `sets/reps/weight/actual` 外，还支持以下动态记录结构；`variantId` 必须属于同一个 `exerciseId`：
+
+```json
+{
+  "exerciseId": "550e8400-e29b-41d4-a716-446655440001",
+  "variantId": "660e8400-e29b-41d4-a716-446655440001",
+  "bodyPart": "cardio",
+  "recordMethods": ["incline", "duration", "speed", "distance"],
+  "targetMetrics": { "incline": 8, "duration": 30, "speed": 9, "distance": 4.5 },
+  "actualGroups": [
+    { "values": { "incline": 8, "duration": 10, "speed": 9, "distance": 1.5 } },
+    { "values": { "incline": 10, "duration": 10, "speed": 8.5, "distance": 1.4 } }
+  ],
+  "sortOrder": 1
+}
+```
+
+`actualGroups.length` 即动作组数。记录方式允许
+`weight/reps/duration/distance/speed/incline/assistance_weight/rir/rpe/angle/other`。
+字段顺序由系统动作默认组合决定，计划可以覆盖；覆盖只保存在
+`training_plan_exercises`，不会修改系统动作。
+
 ### 9.2 获取某日计划
 
 `GET /training-plans/2026-09-15`
@@ -693,6 +733,8 @@ BMI 建议由后端根据最新身高和体重计算：`weightKg / (heightM²)`�
 
 `POST /training-plans/2026-09-15/complete`
 
+当前正式路径为 `POST /api/v1/training-plans/{planId}/complete`。请求可额外携带 `durationMinutes`（1–1440）；填写时训练历史采用该值，未填写时沿用计划预计时长。每个动作同时提交 `recordMethods` 和完整的 `actualGroups`。
+
 请求头：
 
 ```http
@@ -730,6 +772,7 @@ Idempotency-Key: finish-usr_01K-2026-09-15
 4. 日期不能超出允许编辑窗口；建议允许今天及最近 30 天补录。
 5. 首次完成创建训练记录；同一天再次提交更新原记录，不重复计数。
 6. 完成时把动作名称、器械、预期值和实际值复制到历史快照。
+7. 删除训练计划时，同一事务软删除由该计划生成的训练历史；周统计和首页聚合不再计入该记录。
 
 响应：
 
@@ -841,8 +884,16 @@ Idempotency-Key: finish-usr_01K-2026-09-15
 
 - `PATCH /training-records/{recordId}`：允许修正标题、时长或动作实际值。
 - `DELETE /training-records/{recordId}`：软删除记录。
+- 当前正式删除接口为 `DELETE /api/v1/training-history/{recordId}`；列表和详情为
+  `GET /api/v1/training-history`、`GET /api/v1/training-history/{recordId}`。
 
 修改或删除后必须同步刷新周完成统计、首页连续打卡和相关聚合值。
+
+历史动作必须保留 `exerciseId`，并冻结完成当时的
+`exerciseNameSnapshot`、`exerciseVariantNameSnapshot`、
+`recordMethods`、`actualGroups`、主要肌群和辅助肌群快照。用户以后修改
+个人显示名称时，既有历史不能跟随变化；未来导出可以同时使用快照展示和
+`exerciseId` 关联标准动作、肌群数据。
 
 ## 11. 周完成统计
 

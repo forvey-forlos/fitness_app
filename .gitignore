@@ -21,3 +21,6 @@ dist
 *.sw?
 server/.env
 server/node_modules/
+
+# Signing and upload credentials must remain local.
+*.key

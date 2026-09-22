@@ -9,6 +9,7 @@ function createExercisesRoutes(service, authenticate = createAuthMiddleware()) {
   router.get('/', authenticate, validateList, controller.list)
   router.get('/:id', authenticate, controller.get)
   router.post('/', authenticate, validateCreate, controller.create)
+  router.post('/:id/library', authenticate, controller.addToLibrary)
   router.patch('/:id', authenticate, validateUpdate, controller.update)
   router.delete('/:id', authenticate, controller.remove)
   return router

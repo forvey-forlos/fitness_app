@@ -76,7 +76,7 @@
 
         <view class="module action-card" @tap.stop>
           <view class="module-head"><view><text class="module-kicker">LIBRARY</text><text class="module-title">动作管理</text></view><button class="icon-button" hover-class="pressed" @tap="addAction">＋</button></view>
-          <view class="library-count"><text class="big-number">{{ actionTotal }}</text><view><text class="count-label">已收录动作</text><text class="count-note">覆盖 {{ actionPartCount }} 个训练部位 · 系统 {{ systemActionCount }} / 自定义 {{ customActionCount }}</text></view></view>
+          <view class="library-count"><text class="big-number">{{ actionTotal }}</text><view><text class="count-label">个人动作</text><text class="count-note">覆盖 {{ actionPartCount }} 个训练部位 · 系统目录 {{ systemActionCount }} 个</text></view></view>
           <view class="body-parts">
             <view v-for="part in bodyParts" :key="part.name" class="part" @tap="openPart(part.name)"><view class="part-icon">{{ part.icon }}</view><view class="part-copy"><text>{{ part.name }}</text><text>{{ part.count }} 个动作</text></view><text class="arrow">›</text></view>
           </view>
@@ -113,9 +113,8 @@ let homeRequestId=0
 const actionPartMeta=[{key:'shoulder',name:'肩部',icon:'▽'},{key:'chest',name:'胸部',icon:'◇'},{key:'back',name:'背部',icon:'⌁'},{key:'arms',name:'手臂',icon:'↯'},{key:'abs',name:'腹部',icon:'◎'},{key:'legs',name:'腿部',icon:'△'}]
 const actionCountMap=computed(()=>homeSummary.value?.exerciseLibrary?.partCounts||{})
 const bodyParts=computed(()=>actionPartMeta.filter(part=>['chest','back','legs'].includes(part.key)).map(part=>({...part,count:Number(actionCountMap.value[part.key]||0)})))
-const actionTotal=computed(()=>{const library=homeSummary.value?.exerciseLibrary;return Number(library?.systemCount||0)+Number(library?.customCount||0)})
+const actionTotal=computed(()=>Number(homeSummary.value?.exerciseLibrary?.totalCount??homeSummary.value?.exerciseLibrary?.selectedCount??0))
 const systemActionCount=computed(()=>Number(homeSummary.value?.exerciseLibrary?.systemCount||0))
-const customActionCount=computed(()=>Number(homeSummary.value?.exerciseLibrary?.customCount||0))
 const actionPartCount=computed(()=>Number(homeSummary.value?.exerciseLibrary?.activePartCount||0))
 const themeStyle = computed(() => { const bg=themes[themeIndex.value],ui=themes[uiThemeIndex.value]; return { '--accent':ui.accent,'--accent-2':ui.accent2,'--pale':ui.pale,'--pale-2':ui.pale2,'--bg-pale':bg.pale,'--bg-pale-2':bg.pale2,'--glow-rgb':ui.glow } })
 const transitionStyle = computed(() => ({ '--next-pale':pendingTheme.value.pale,'--next-pale-2':pendingTheme.value.pale2 }))

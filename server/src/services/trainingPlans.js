@@ -4,7 +4,14 @@ const { HttpError } = require('../utils/response')
 const partNames = {
   shoulder: ['肩部', '肩'], chest: ['胸部', '胸'],
   back: ['背部', '背'], arms: ['手臂', '臂'],
-  abs: ['腹部', '腹'], legs: ['腿部', '腿']
+  abs: ['腹部', '腹'], core: ['核心', '核'], legs: ['腿部', '腿'],
+  glutes: ['臀部', '臀'], full_body: ['全身', '全'], cardio: ['有氧', '氧'], other: ['其他', '其']
+}
+
+function readJson(value, fallback) {
+  if (value === null || value === undefined) return fallback
+  if (typeof value === 'object') return value
+  try { return JSON.parse(value) } catch (_) { return fallback }
 }
 
 function iso(value) {
@@ -27,16 +34,26 @@ function presentItem(row) {
     reps: row.actual_reps, sets: row.actual_sets
   }
   return {
-    id: row.id, exerciseId: row.exercise_id, sortOrder: row.sort_order,
+    id: row.id, exerciseId: row.exercise_id, variantId: row.exercise_variant_id,
+    variant: row.exercise_variant_id ? { id: row.exercise_variant_id, name: row.variant_name,
+      standardName: row.variant_standard_name } : null, sortOrder: row.sort_order,
+    bodyPart: row.body_part || row.exercise_category,
+    recordMethods: readJson(row.record_methods, readJson(row.exercise_record_methods, ['weight', 'reps'])),
+    targetMetrics: readJson(row.target_metrics, { weight: row.weight === null ? null : Number(row.weight), reps: row.reps }),
+    actualGroups: readJson(row.actual_groups, []),
     sets: row.sets, reps: row.reps,
     weight: row.weight === null ? null : Number(row.weight),
     actual, restSeconds: row.rest_seconds, notes: row.notes,
     createdAt: iso(row.created_at), updatedAt: iso(row.updated_at),
     exercise: {
-      id: row.exercise_id, name: row.exercise_name,
+      id: row.exercise_id, name: row.exercise_name, standardName: row.exercise_standard_name,
+      defaultDisplayName: row.exercise_default_display_name,
       category: row.exercise_category, bodyPart: row.exercise_category,
+      bodyParts: readJson(row.exercise_body_parts, [row.exercise_category]),
+      recordMethods: readJson(row.exercise_record_methods, ['weight', 'reps']),
       muscleGroup: row.exercise_muscle_group,
       equipment: row.exercise_equipment,
+      variants: readJson(row.exercise_variants, []),
       isSystem: Boolean(row.exercise_is_system),
       archived: Boolean(row.exercise_deleted_at)
     }
@@ -46,12 +63,12 @@ function presentItem(row) {
 function generatedName(items, exercisesById) {
   const categories = []
   for (const item of items) {
-    const category = exercisesById.get(item.exerciseId).category
+    const category = item.bodyPart || exercisesById.get(item.exerciseId).category
     if (!categories.includes(category)) categories.push(category)
   }
   if (categories.length === 0) return '今日训练'
-  if (categories.length === 1) return partNames[categories[0]][0] + '训练'
-  return categories.map((category) => partNames[category][1]).join('') + '训练'
+  if (categories.length === 1) return (partNames[categories[0]] || partNames.other)[0] + '训练'
+  return categories.map((category) => (partNames[category] || partNames.other)[1]).join('') + '训练'
 }
 
 function createTrainingPlansService(options = {}) {
@@ -72,6 +89,9 @@ function createTrainingPlansService(options = {}) {
       const exercise = await exercisesRepository.findVisibleById(userId, item.exerciseId)
       if (!exercise) {
         throw new HttpError(422, 'EXERCISE_UNAVAILABLE', '动作不存在或不可用于当前用户')
+      }
+      if (item.variantId && !await exercisesRepository.findVariant(item.exerciseId, item.variantId)) {
+        throw new HttpError(422, 'EXERCISE_VARIANT_UNAVAILABLE', '动作变式不存在或不属于该动作')
       }
       byId.set(item.exerciseId, exercise)
     }
