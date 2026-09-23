@@ -93,7 +93,7 @@
 </template>
 
 <script setup>
-import { computed,ref } from 'vue'
+import { computed,ref,watch } from 'vue'
 import { onHide,onLoad,onShow,onUnload } from '@dcloudio/uni-app'
 import { getExercises } from '../../api/exercises'
 import { USER_KEY } from '../../api/auth'
@@ -120,7 +120,7 @@ const workoutStartedAt=ref('')
 const savedDraftSignature=ref('')
 const dragIndex=ref(-1)
 const methodEditorAction=ref(null),methodDraft=ref([])
-let dragStartY=0,mouseCleanup=null
+let dragStartY=0,mouseCleanup=null,draftSaveTimer=null,draftHydrating=false
 const themeStyle=computed(()=>{const t=themes[themeIndex.value];return{'--accent':t.accent,'--accent-2':t.accent2,'--pale':t.pale,'--pale-2':t.pale2,'--glow-rgb':t.glow}})
 const todayText=computed(()=>new Date(selectedDate.value+'T00:00:00').toLocaleDateString('zh-CN',{month:'long',day:'numeric',weekday:'long'}))
 const activePart=computed(()=>planParts.value.find(part=>part.key===selectedPartKey.value)||null)
@@ -153,14 +153,25 @@ function draftSignature(){return JSON.stringify(planParts.value.map(part=>({key:
 function draftStorageKey(date=selectedDate.value){return PLAN_DRAFT_PREFIX+date}
 function clearLocalDraft(date=selectedDate.value){if(date)uni.removeStorageSync(draftStorageKey(date))}
 function saveLocalDraft(){
+  if(draftHydrating)return
   if(!/^\d{4}-\d{2}-\d{2}$/.test(selectedDate.value||''))return
-  if(todayCompleted.value||!hasUnsavedPlan()){clearLocalDraft();return}
+  const newPlanHasContent=!currentPlan.value&&planParts.value.length>0
+  if(todayCompleted.value||!newPlanHasContent&&!hasUnsavedPlan()){clearLocalDraft();return}
   uni.setStorageSync(draftStorageKey(),{
     schemaVersion:1,userScope:USER_SCOPE,planDate:selectedDate.value,
     basePlanId:currentPlan.value?.id||null,basePlanVersion:currentPlan.value?.version||null,
     selectedPartKey:selectedPartKey.value,workoutStartedAt:workoutStartedAt.value,
     planParts:JSON.parse(JSON.stringify(planParts.value)),updatedAt:new Date().toISOString()
   })
+}
+function scheduleLocalDraftSave(){
+  if(loading.value)return
+  if(draftSaveTimer)clearTimeout(draftSaveTimer)
+  draftSaveTimer=setTimeout(()=>{draftSaveTimer=null;saveLocalDraft()},120)
+}
+function flushLocalDraft(){
+  if(draftSaveTimer){clearTimeout(draftSaveTimer);draftSaveTimer=null}
+  saveLocalDraft()
 }
 function restoreLocalDraft(){
   const draft=uni.getStorageSync(draftStorageKey())
@@ -228,10 +239,10 @@ async function loadPlan(){
 async function load(){
   if(loading.value)return
   const ti=Number(uni.getStorageSync(THEME_KEY));themeIndex.value=Number.isInteger(ti)&&themes[ti]?ti:0
-  loading.value=true;loadError.value=''
+  loading.value=true;draftHydrating=true;loadError.value=''
   try{await Promise.all([loadExerciseLibrary(),loadPlan()]);restoreLocalDraft()}
   catch(error){showError(error,'训练计划加载失败')}
-  finally{loading.value=false}
+  finally{loading.value=false;draftHydrating=false}
 }
 function ensureEditable(){if(!todayCompleted.value)return true;uni.showToast({title:'已完成计划不可修改',icon:'none'});return false}
 function addPart(){if(!ensureEditable())return;const available=availableParts();if(!available.length){uni.showToast({title:'训练部位已全部添加',icon:'none'});return}uni.showActionSheet({itemList:available.map(part=>part.name),success:({tapIndex})=>{const part=available[tapIndex];planParts.value.push({...part,actions:[]});selectedPartKey.value=part.key}})}
@@ -395,8 +406,9 @@ function managePlan(){
 function goBack(){uni.navigateBack({fail:()=>uni.reLaunch({url:'/pages/home/home'})})}
 onLoad(options=>{const stored=uni.getStorageSync(PLAN_LAST_DATE_KEY),requested=options?.date||'';selectedDate.value=/^\d{4}-\d{2}-\d{2}$/.test(requested)?requested:/^\d{4}-\d{2}-\d{2}$/.test(stored||'')?stored:dateKey();uni.setStorageSync(PLAN_LAST_DATE_KEY,selectedDate.value)})
 onShow(load)
-onHide(saveLocalDraft)
-onUnload(saveLocalDraft)
+watch(planParts,scheduleLocalDraftSave,{deep:true})
+onHide(flushLocalDraft)
+onUnload(flushLocalDraft)
 </script>
 
 <style scoped>
