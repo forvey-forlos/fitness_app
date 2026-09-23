@@ -94,7 +94,7 @@
 
 <script setup>
 import { computed,ref } from 'vue'
-import { onLoad,onShow } from '@dcloudio/uni-app'
+import { onHide,onLoad,onShow,onUnload } from '@dcloudio/uni-app'
 import { getExercises } from '../../api/exercises'
 import { USER_KEY } from '../../api/auth'
 import { bodyPartOptions,recordMethodOptions,recordMethodName } from '../../constants/exercise-meta'
@@ -104,7 +104,10 @@ import {
 } from '../../api/training'
 const THEME_KEY='fit_note_theme_index'
 const cachedUser=uni.getStorageSync(USER_KEY)||{}
-const ACTION_ORDER_KEY='fit_note_action_order_'+String(cachedUser.id||cachedUser.accountCode||'anonymous')
+const USER_SCOPE=String(cachedUser.id||cachedUser.accountCode||'anonymous')
+const ACTION_ORDER_KEY='fit_note_action_order_'+USER_SCOPE
+const PLAN_DRAFT_PREFIX='fit_note_training_plan_draft_v1_'+USER_SCOPE+'_'
+const PLAN_LAST_DATE_KEY='fit_note_training_plan_last_date_'+USER_SCOPE
 const themes=[{accent:'#7775bd',accent2:'#a59bd2',pale:'#f1f0f9',pale2:'#faf9fd',glow:'119,117,189'},{accent:'#5f9fa5',accent2:'#8bbdaf',pale:'#edf6f5',pale2:'#f8fbfa',glow:'95,159,165'},{accent:'#bd8073',accent2:'#cda56f',pale:'#faf1ed',pale2:'#fdf9f5',glow:'189,128,115'}]
 const partLooks={chest:['胸','◇'],back:['背','⌁'],shoulder:['肩','▽'],arms:['臂','↯'],legs:['腿','△'],glutes:['臀','◒'],core:['核','◎'],full_body:['全','✦'],cardio:['氧','≈'],other:['其','·']}
 const parts=bodyPartOptions.map(part=>({...part,short:partLooks[part.key][0],icon:partLooks[part.key][1]}))
@@ -126,7 +129,7 @@ const completedActions=computed(()=>planParts.value.reduce((sum,part)=>sum+compl
 const planTitle=computed(()=>{if(currentPlan.value?.name)return currentPlan.value.name;if(!planParts.value.length)return'训练计划';if(planParts.value.length===1)return planParts.value[0].name+'训练';return planParts.value.map(part=>part.short).join('')+'训练'})
 const estimatedDuration=computed(()=>Math.max(20,totalActions.value*8))
 const todayCompleted=computed(()=>currentPlan.value?.status==='completed')
-const syncText=computed(()=>saving.value?'正在保存':loading.value?'正在同步':loadError.value?'同步失败':currentPlan.value?'云端已保存':'尚未创建')
+const syncText=computed(()=>saving.value?'正在保存':loading.value?'正在同步':loadError.value?'同步失败':hasUnsavedPlan()?'本地草稿':currentPlan.value?'云端已保存':'尚未创建')
 function pad(v){return String(v).padStart(2,'0')}
 function dateKey(){const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`}
 function list(value){return Array.isArray(value)?value:[]}
@@ -147,6 +150,37 @@ function planAction(item){
   return{id:item.id||item.exerciseId,exerciseId:item.exerciseId,name:item.exercise?.name||'已归档动作',equipment:equipmentName(item.exercise?.equipment),bodyPart:item.bodyPart||actionParts(item.exercise||{})[0]||'other',exerciseDefaultMethods:list(item.exercise?.recordMethods).length?list(item.exercise.recordMethods):['weight','reps'],recordMethods:methods,variants,variantId:item.variantId||null,variant,targetMetrics:emptyValues(methods,target),actualGroups:normalizeGroups(item.actualGroups,methods,item.actual),restSeconds:item.restSeconds??null,notes:item.notes??null}
 }
 function draftSignature(){return JSON.stringify(planParts.value.map(part=>({key:part.key,actions:part.actions.map(action=>({exerciseId:action.exerciseId,variantId:action.variantId,recordMethods:action.recordMethods,targetMetrics:action.targetMetrics,actualGroups:action.actualGroups.map(group=>group.values),restSeconds:action.restSeconds,notes:action.notes}))})))}
+function draftStorageKey(date=selectedDate.value){return PLAN_DRAFT_PREFIX+date}
+function clearLocalDraft(date=selectedDate.value){if(date)uni.removeStorageSync(draftStorageKey(date))}
+function saveLocalDraft(){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(selectedDate.value||''))return
+  if(todayCompleted.value||!hasUnsavedPlan()){clearLocalDraft();return}
+  uni.setStorageSync(draftStorageKey(),{
+    schemaVersion:1,userScope:USER_SCOPE,planDate:selectedDate.value,
+    basePlanId:currentPlan.value?.id||null,basePlanVersion:currentPlan.value?.version||null,
+    selectedPartKey:selectedPartKey.value,workoutStartedAt:workoutStartedAt.value,
+    planParts:JSON.parse(JSON.stringify(planParts.value)),updatedAt:new Date().toISOString()
+  })
+}
+function restoreLocalDraft(){
+  const draft=uni.getStorageSync(draftStorageKey())
+  if(!draft||typeof draft!=='object')return false
+  const sameBase=(draft.basePlanId||null)===(currentPlan.value?.id||null)
+  const sameVersion=!draft.basePlanId||draft.basePlanVersion===currentPlan.value?.version
+  if(draft.schemaVersion!==1||draft.userScope!==USER_SCOPE||draft.planDate!==selectedDate.value||
+      !sameBase||!sameVersion||todayCompleted.value||!Array.isArray(draft.planParts)){
+    clearLocalDraft()
+    if(!sameBase||!sameVersion)uni.showToast({title:'云端计划已更新，旧草稿未恢复',icon:'none'})
+    return false
+  }
+  const partMap=new Map(parts.map(part=>[part.key,part]))
+  planParts.value=draft.planParts.filter(part=>partMap.has(part?.key)&&Array.isArray(part.actions))
+    .map(part=>({...partMap.get(part.key),actions:part.actions}))
+  selectedPartKey.value=planParts.value.some(part=>part.key===draft.selectedPartKey)
+    ?draft.selectedPartKey:planParts.value[0]?.key||''
+  workoutStartedAt.value=draft.workoutStartedAt||workoutStartedAt.value
+  return true
+}
 function hasMetricValue(value){return value!==''&&value!==null&&value!==undefined&&Number.isFinite(Number(value))}
 function isActionDone(action){return action.actualGroups.length>0&&action.actualGroups.every(group=>action.recordMethods.every(method=>hasMetricValue(group.values[method])))}
 function completedInPart(part){return part.actions.filter(isActionDone).length}
@@ -158,7 +192,7 @@ function applyPlan(plan){
   if(plan?.status==='draft'&&previousPlanId!==plan.id)workoutStartedAt.value=new Date().toISOString()
   if(!plan||plan.status==='completed')workoutStartedAt.value=''
   if(!plan||completionAttempt.value&&(completionAttempt.value.planId!==plan.id||completionAttempt.value.version!==plan.version))completionAttempt.value=null
-  if(!plan){planParts.value=[];selectedPartKey.value='';savedDraftSignature.value='';return}
+  if(!plan){planParts.value=[];selectedPartKey.value='';savedDraftSignature.value=draftSignature();return}
   const byCategory=new Map()
   for(const item of plan.exercises||[]){
     const action=planAction(item),key=action.bodyPart
@@ -195,7 +229,7 @@ async function load(){
   if(loading.value)return
   const ti=Number(uni.getStorageSync(THEME_KEY));themeIndex.value=Number.isInteger(ti)&&themes[ti]?ti:0
   loading.value=true;loadError.value=''
-  try{await Promise.all([loadExerciseLibrary(),loadPlan()])}
+  try{await Promise.all([loadExerciseLibrary(),loadPlan()]);restoreLocalDraft()}
   catch(error){showError(error,'训练计划加载失败')}
   finally{loading.value=false}
 }
@@ -253,13 +287,13 @@ async function changePlanDate(event){
   if(!/^\d{4}-\d{2}-\d{2}$/.test(next||'')||next===selectedDate.value)return
   const switchDate=async()=>{
     const previous=selectedDate.value
-    selectedDate.value=next;loading.value=true;loadError.value=''
-    try{await loadPlan()}
-    catch(error){selectedDate.value=previous;showError(error,'训练计划加载失败')}
+    selectedDate.value=next;uni.setStorageSync(PLAN_LAST_DATE_KEY,next);loading.value=true;loadError.value=''
+    try{await loadPlan();restoreLocalDraft()}
+    catch(error){selectedDate.value=previous;uni.setStorageSync(PLAN_LAST_DATE_KEY,previous);showError(error,'训练计划加载失败')}
     finally{loading.value=false}
   }
   if(!hasUnsavedPlan()){await switchDate();return}
-  uni.showModal({title:'切换训练日期？',content:'当前未保存的计划修改将丢失。',success:result=>{if(result.confirm)switchDate()}})
+  uni.showModal({title:'切换训练日期？',content:'当前内容会保存为本地草稿，返回该日期时自动恢复。',success:result=>{if(result.confirm){saveLocalDraft();switchDate()}}})
 }
 function requirePlanResponse(plan){
   const valid=plan&&typeof plan==='object'&&typeof plan.id==='string'&&plan.id&&
@@ -284,9 +318,11 @@ async function savePlan(){
       ?await updateTrainingPlan(currentPlan.value.id,{...data,version:currentPlan.value.version})
       :await createTrainingPlan(data,'plan-'+selectedDate.value+'-'+Date.now())
     applyPlan(requirePlanResponse(saved))
+    clearLocalDraft()
     uni.showToast({title:currentPlan.value?.version>1?'计划已更新':'计划已创建',icon:'success'})
   }catch(error){
     if(error?.code==='PLAN_VERSION_CONFLICT'){
+      clearLocalDraft()
       uni.showModal({title:'计划已在其他位置更新',content:'不会覆盖服务器数据，点击确定后加载最新计划。',showCancel:false,success:()=>loadPlan().catch(loadError=>showError(loadError,'最新计划加载失败'))})
     }else{
       showError(error,error?.code==='PLAN_DATE_CONFLICT'?'当天已有训练计划':'计划保存失败')
@@ -328,6 +364,7 @@ async function completeTraining(){
       ...(attempt.startedAt?{startedAt:attempt.startedAt}:{})
     },attempt.key)
     completionAttempt.value=null
+    clearLocalDraft()
     await loadPlan()
     uni.showToast({title:'训练已完成',icon:'success'})
   }catch(error){
@@ -349,15 +386,17 @@ function managePlan(){
     uni.showModal({title:`删除“${currentPlan.value.name}”？`,content:'删除后当天将恢复为无计划状态。',success:async result=>{
       if(!result.confirm)return
       saving.value=true
-      try{await deleteTrainingPlan(currentPlan.value.id);applyPlan(null);uni.showToast({title:'计划已删除',icon:'success'})}
+      try{await deleteTrainingPlan(currentPlan.value.id);clearLocalDraft();applyPlan(null);uni.showToast({title:'计划已删除',icon:'success'})}
       catch(error){showError(error,'计划删除失败')}
       finally{saving.value=false}
     }})
   }})
 }
 function goBack(){uni.navigateBack({fail:()=>uni.reLaunch({url:'/pages/home/home'})})}
-onLoad(options=>{selectedDate.value=/^\d{4}-\d{2}-\d{2}$/.test(options?.date||'')?options.date:dateKey()})
+onLoad(options=>{const stored=uni.getStorageSync(PLAN_LAST_DATE_KEY),requested=options?.date||'';selectedDate.value=/^\d{4}-\d{2}-\d{2}$/.test(requested)?requested:/^\d{4}-\d{2}-\d{2}$/.test(stored||'')?stored:dateKey();uni.setStorageSync(PLAN_LAST_DATE_KEY,selectedDate.value)})
 onShow(load)
+onHide(saveLocalDraft)
+onUnload(saveLocalDraft)
 </script>
 
 <style scoped>

@@ -3,9 +3,19 @@
 -- and conservative, commonly accepted primary/secondary muscle relationships.
 SET time_zone = '+00:00';
 
+INSERT INTO muscles (id, standard_name_en, default_display_name_zh, body_part) VALUES
+  ('gracilis','Gracilis','股薄肌','legs'),
+  ('pectineus','Pectineus','耻骨肌','legs'),
+  ('tensor_fasciae_latae','Tensor Fasciae Latae','阔筋膜张肌','glutes'),
+  ('iliopsoas','Iliopsoas','髂腰肌','core')
+ON DUPLICATE KEY UPDATE
+  standard_name_en=VALUES(standard_name_en),
+  default_display_name_zh=VALUES(default_display_name_zh),
+  body_part=VALUES(body_part);
+
 UPDATE exercises SET
-  default_display_name_zh = name,
-  default_display_name_normalized = name_normalized,
+  default_display_name_zh = CASE WHEN catalog_key='seated_leg_press' THEN '腿举' ELSE name END,
+  default_display_name_normalized = CASE WHEN catalog_key='seated_leg_press' THEN '腿举' ELSE name_normalized END,
   standard_name_en = CASE catalog_key
     WHEN 'barbell_bench_press' THEN 'Barbell Bench Press' WHEN 'incline_dumbbell_bench_press' THEN 'Incline Dumbbell Bench Press'
     WHEN 'machine_chest_fly' THEN 'Machine Chest Fly' WHEN 'push_up' THEN 'Push-Up'
@@ -18,7 +28,7 @@ UPDATE exercises SET
     WHEN 'close_grip_barbell_bench_press' THEN 'Close-Grip Barbell Bench Press' WHEN 'dumbbell_overhead_triceps_extension' THEN 'Dumbbell Overhead Triceps Extension'
     WHEN 'cable_triceps_pushdown' THEN 'Cable Triceps Pushdown' WHEN 'parallel_bar_dip' THEN 'Parallel Bar Dip'
     WHEN 'barbell_back_squat' THEN 'Barbell Back Squat' WHEN 'dumbbell_lunge' THEN 'Dumbbell Lunge'
-    WHEN 'seated_leg_press' THEN 'Seated Leg Press' WHEN 'bodyweight_squat' THEN 'Bodyweight Squat'
+    WHEN 'seated_leg_press' THEN 'Leg Press' WHEN 'bodyweight_squat' THEN 'Bodyweight Squat'
     WHEN 'barbell_hip_thrust' THEN 'Barbell Hip Thrust' WHEN 'dumbbell_romanian_deadlift' THEN 'Dumbbell Romanian Deadlift'
     WHEN 'cable_hip_extension' THEN 'Cable Hip Extension' WHEN 'glute_bridge' THEN 'Glute Bridge'
     WHEN 'front_plank' THEN 'Front Plank' WHEN 'crunch' THEN 'Crunch'
@@ -53,7 +63,21 @@ VALUES
   ('10000000-0000-4000-8000-000000000039',NULL,'动感单车','动感单车','stationary_cycling','Stationary Cycling','动感单车','动感单车',
    JSON_ARRAY('cardio'),JSON_ARRAY('duration','distance'),'legs','legs',JSON_ARRAY('cardiorespiratory'),JSON_ARRAY('quadriceps','gluteus_maximus','calves'),JSON_ARRAY(),'cardio_machine','cardio',390,1),
   ('10000000-0000-4000-8000-000000000040',NULL,'波比跳','波比跳','burpee','Burpee','波比跳','波比跳',
-   JSON_ARRAY('full_body','cardio'),JSON_ARRAY('reps'),'legs','legs',JSON_ARRAY('full_body'),JSON_ARRAY('cardiorespiratory'),JSON_ARRAY(),'bodyweight','conditioning',400,1)
+   JSON_ARRAY('full_body','cardio'),JSON_ARRAY('reps'),'legs','legs',JSON_ARRAY('full_body'),JSON_ARRAY('cardiorespiratory'),JSON_ARRAY(),'bodyweight','conditioning',400,1),
+  ('10000000-0000-4000-8000-000000000041',NULL,'坐姿髋内收','坐姿髋内收','seated_hip_adduction','Seated Hip Adduction','坐姿髋内收','坐姿髋内收',
+   JSON_ARRAY('legs','glutes'),JSON_ARRAY('weight','reps'),'legs','legs',JSON_ARRAY('adductors'),JSON_ARRAY('gracilis','pectineus'),JSON_ARRAY(),'machine','strength',410,1),
+  ('10000000-0000-4000-8000-000000000042',NULL,'坐姿髋外展','坐姿髋外展','seated_hip_abduction','Seated Hip Abduction','坐姿髋外展','坐姿髋外展',
+   JSON_ARRAY('glutes','legs'),JSON_ARRAY('weight','reps'),'legs','glutes',JSON_ARRAY('gluteus_medius','gluteus_minimus'),JSON_ARRAY('gluteus_maximus','tensor_fasciae_latae'),JSON_ARRAY(),'machine','strength',420,1),
+  ('10000000-0000-4000-8000-000000000043',NULL,'抬腿卷腹','抬腿卷腹','leg_raise_crunch','Leg Raise Crunch','抬腿卷腹','抬腿卷腹',
+   JSON_ARRAY('core'),JSON_ARRAY('reps'),'abs','core',JSON_ARRAY('rectus_abdominis'),JSON_ARRAY('iliopsoas','obliques'),JSON_ARRAY(),'bodyweight','strength',430,1),
+  ('10000000-0000-4000-8000-000000000044',NULL,'仰卧起坐','仰卧起坐','sit_up','Sit-Up','仰卧起坐','仰卧起坐',
+   JSON_ARRAY('core'),JSON_ARRAY('reps'),'abs','core',JSON_ARRAY('rectus_abdominis'),JSON_ARRAY('iliopsoas','obliques'),JSON_ARRAY(),'bodyweight','strength',440,1),
+  ('10000000-0000-4000-8000-000000000045',NULL,'单臂坐姿划船','单臂坐姿划船','single_arm_seated_row','Single-Arm Seated Row','单臂坐姿划船','单臂坐姿划船',
+   JSON_ARRAY('back'),JSON_ARRAY('weight','reps'),'back','back',JSON_ARRAY('latissimus_dorsi','trapezius','rhomboids'),JSON_ARRAY('posterior_deltoid','biceps','brachialis'),JSON_ARRAY(),'cable','strength',450,1),
+  ('10000000-0000-4000-8000-000000000046',NULL,'辅助引体向上','辅助引体向上','assisted_pull_up','Assisted Pull-Up','辅助引体向上','辅助引体向上',
+   JSON_ARRAY('back'),JSON_ARRAY('assistance_weight','reps'),'back','back',JSON_ARRAY('latissimus_dorsi'),JSON_ARRAY('teres_major','rhomboids','trapezius','biceps'),JSON_ARRAY(),'machine','strength',460,1),
+  ('10000000-0000-4000-8000-000000000047',NULL,'哑铃上举','哑铃上举','dumbbell_overhead_press','Dumbbell Overhead Press','哑铃上举','哑铃上举',
+   JSON_ARRAY('shoulder'),JSON_ARRAY('weight','reps'),'shoulder','shoulder',JSON_ARRAY('anterior_deltoid','lateral_deltoid'),JSON_ARRAY('triceps','trapezius'),JSON_ARRAY(),'dumbbell','strength',470,1)
 ON DUPLICATE KEY UPDATE
   standard_name_en=VALUES(standard_name_en), default_display_name_zh=VALUES(default_display_name_zh),
   catalog_key=VALUES(catalog_key),
@@ -73,10 +97,56 @@ JOIN (
   SELECT 'front_plank','平板','平板','zh-CN' UNION ALL SELECT 'front_plank','Plank','plank','en' UNION ALL
   SELECT 'treadmill_running','跑步','跑步','zh-CN' UNION ALL SELECT 'treadmill_running','Treadmill Run','treadmill run','en' UNION ALL
   SELECT 'seated_cable_row','划船','划船','zh-CN' UNION ALL SELECT 'seated_cable_row','Cable Row','cable row','en' UNION ALL
-  SELECT 'barbell_hip_thrust','臀推','臀推','zh-CN' UNION ALL SELECT 'barbell_hip_thrust','Hip Thrust','hip thrust','en'
+  SELECT 'barbell_hip_thrust','臀推','臀推','zh-CN' UNION ALL SELECT 'barbell_hip_thrust','Hip Thrust','hip thrust','en' UNION ALL
+  SELECT 'seated_hip_adduction','髋内收','髋内收','zh-CN' UNION ALL SELECT 'seated_hip_adduction','腿内收','腿内收','zh-CN' UNION ALL
+  SELECT 'seated_hip_adduction','Hip Adduction','hip adduction','en' UNION ALL
+  SELECT 'seated_hip_abduction','髋外展','髋外展','zh-CN' UNION ALL SELECT 'seated_hip_abduction','腿外展','腿外展','zh-CN' UNION ALL
+  SELECT 'seated_hip_abduction','Hip Abduction','hip abduction','en' UNION ALL
+  SELECT 'seated_leg_press','倒蹬机','倒蹬机','zh-CN' UNION ALL SELECT 'seated_leg_press','腿举机','腿举机','zh-CN' UNION ALL
+  SELECT 'seated_leg_press','坐姿腿举','坐姿腿举','zh-CN' UNION ALL SELECT 'seated_leg_press','Leg Press','leg press','en' UNION ALL
+  SELECT 'leg_raise_crunch','抬腿卷腹','抬腿卷腹','zh-CN' UNION ALL SELECT 'leg_raise_crunch','Leg Raise Crunch','leg raise crunch','en' UNION ALL
+  SELECT 'sit_up','仰卧起坐','仰卧起坐','zh-CN' UNION ALL SELECT 'sit_up','Sit-Up','sit-up','en' UNION ALL
+  SELECT 'single_arm_seated_row','单臂绳索划船','单臂绳索划船','zh-CN' UNION ALL
+  SELECT 'single_arm_seated_row','Single-Arm Seated Row','single-arm seated row','en' UNION ALL
+  SELECT 'assisted_pull_up','辅助胸部引体向上','辅助胸部引体向上','zh-CN' UNION ALL
+  SELECT 'assisted_pull_up','辅助背部引体向上','辅助背部引体向上','zh-CN' UNION ALL
+  SELECT 'assisted_pull_up','助力引体','助力引体','zh-CN' UNION ALL
+  SELECT 'assisted_pull_up','Assisted Pull-Up','assisted pull-up','en' UNION ALL
+  SELECT 'dumbbell_overhead_press','哑铃肩推','哑铃肩推','zh-CN' UNION ALL
+  SELECT 'dumbbell_overhead_press','哑铃推举','哑铃推举','zh-CN' UNION ALL
+  SELECT 'dumbbell_overhead_press','Dumbbell Shoulder Press','dumbbell shoulder press','en'
 ) a ON a.exercise_key = e.catalog_key
 WHERE e.is_system = 1
 ON DUPLICATE KEY UPDATE alias=VALUES(alias), locale=VALUES(locale);
+
+INSERT INTO exercise_variants
+  (id,exercise_id,variant_code,standard_name_en,default_display_name_zh,
+   primary_muscles,secondary_muscles,sort_order,deleted_at)
+SELECT v.id,e.id,v.variant_code,v.standard_name_en,v.display_name,
+       v.primary_muscles,v.secondary_muscles,v.sort_order,NULL
+FROM exercises e
+JOIN (
+  SELECT '20000000-0000-4000-8000-000000000001' id,'wide_overhand' variant_code,
+         'Wide Overhand Grip' standard_name_en,'宽握正握' display_name,
+         JSON_ARRAY('latissimus_dorsi') primary_muscles,
+         JSON_ARRAY('teres_major','rhomboids','trapezius','biceps') secondary_muscles,10 sort_order
+  UNION ALL
+  SELECT '20000000-0000-4000-8000-000000000002','neutral_grip',
+         'Neutral Grip','中立握',
+         JSON_ARRAY('latissimus_dorsi'),JSON_ARRAY('teres_major','rhomboids','biceps'),20
+  UNION ALL
+  SELECT '20000000-0000-4000-8000-000000000003','underhand_grip',
+         'Underhand Grip','反握',
+         JSON_ARRAY('latissimus_dorsi'),JSON_ARRAY('biceps','brachialis','teres_major'),30
+) v
+WHERE e.catalog_key='assisted_pull_up' AND e.is_system=1 AND e.deleted_at IS NULL
+ON DUPLICATE KEY UPDATE
+  standard_name_en=VALUES(standard_name_en),
+  default_display_name_zh=VALUES(default_display_name_zh),
+  primary_muscles=VALUES(primary_muscles),
+  secondary_muscles=VALUES(secondary_muscles),
+  sort_order=VALUES(sort_order),
+  deleted_at=NULL;
 
 DELETE em FROM exercise_muscles em JOIN exercises e ON e.id=em.exercise_id WHERE e.is_system=1;
 INSERT IGNORE INTO exercise_muscles (exercise_id, muscle_id, role, sort_order)
