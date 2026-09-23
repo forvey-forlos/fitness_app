@@ -38,7 +38,7 @@ test('home summary aggregates only the authenticated user and uses their local d
     duration_minutes: 40, status: 'draft', version: 2,
     created_at: stamp, updated_at: stamp, completed_at: null
   }
-  const completion = { id: recordId, completed_at: stamp }
+  const completion = { id: recordId, plan_date: '2026-09-19' }
   const service = createHomeService({
     now: () => new Date('2026-09-18T16:30:00.000Z'),
     usersRepository: { findActiveById: async (id) => users.get(id) || null },
@@ -71,11 +71,11 @@ test('home summary aggregates only the authenticated user and uses their local d
       }
     },
     trainingSessionsRepository: {
-      async listCompletedInRange(id) {
+      async listCompletedByPlanDateRange(id) {
         scoped.push(['week', id])
         return id === userA && completionExists ? [completion] : []
       },
-      async listRecentCompletions(id) {
+      async listRecentPlanDates(id) {
         scoped.push(['streak', id])
         return id === userA && completionExists ? [completion] : []
       }

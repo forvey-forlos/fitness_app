@@ -159,30 +159,30 @@ function createTrainingSessionsRepository(pool) {
       )
       return { rows, total: Number(counts[0].total) }
     },
-    async listCompletedInRange(userId, startUtc, endUtc) {
+    async listCompletedByPlanDateRange(userId, startDate, endDate) {
       const [rows] = await pool.execute(
         ['SELECT s.id,',
-          "DATE_FORMAT(s.completed_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS completed_at",
+          "DATE_FORMAT(s.plan_date, '%Y-%m-%d') AS plan_date",
           'FROM training_sessions s WHERE s.user_id = ? AND s.deleted_at IS NULL',
-          'AND s.completed_at >= ? AND s.completed_at < ?',
-          'ORDER BY s.completed_at ASC, s.id ASC'].join(' '),
-        [userId, startUtc, endUtc]
+          'AND s.plan_date >= ? AND s.plan_date < ?',
+          'ORDER BY s.plan_date ASC, s.id ASC'].join(' '),
+        [userId, startDate, endDate]
       )
       return rows
     },
-    async listRecentCompletions(userId, beforeUtc, cursor, limit) {
+    async listRecentPlanDates(userId, beforeDate, cursor, limit) {
       const conditions = [
-        'user_id = ?', 'deleted_at IS NULL', 'completed_at < ?'
+        'user_id = ?', 'deleted_at IS NULL', 'plan_date < ?'
       ]
-      const params = [userId, beforeUtc]
+      const params = [userId, beforeDate]
       if (cursor) {
-        conditions.push('(completed_at < ? OR (completed_at = ? AND id < ?))')
-        params.push(cursor.completedAt, cursor.completedAt, cursor.id)
+        conditions.push('(plan_date < ? OR (plan_date = ? AND id < ?))')
+        params.push(cursor.planDate, cursor.planDate, cursor.id)
       }
       const [rows] = await pool.execute(
-        ["SELECT id, DATE_FORMAT(completed_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS completed_at",
+        ["SELECT id, DATE_FORMAT(plan_date, '%Y-%m-%d') AS plan_date",
           'FROM training_sessions WHERE', conditions.join(' AND '),
-          'ORDER BY completed_at DESC, id DESC LIMIT ?'].join(' '),
+          'ORDER BY plan_date DESC, id DESC LIMIT ?'].join(' '),
         [...params, limit]
       )
       return rows
@@ -208,7 +208,7 @@ module.exports = {
   findOwnedById: (...args) => defaultRepository().findOwnedById(...args),
   listExercises: (...args) => defaultRepository().listExercises(...args),
   list: (...args) => defaultRepository().list(...args),
-  listCompletedInRange: (...args) => defaultRepository().listCompletedInRange(...args),
-  listRecentCompletions: (...args) => defaultRepository().listRecentCompletions(...args),
+  listCompletedByPlanDateRange: (...args) => defaultRepository().listCompletedByPlanDateRange(...args),
+  listRecentPlanDates: (...args) => defaultRepository().listRecentPlanDates(...args),
   softDelete: (...args) => defaultRepository().softDelete(...args)
 }

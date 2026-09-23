@@ -75,12 +75,10 @@ function createTrainingSessionsService(options = {}) {
     const timezone = user.timezone || 'Asia/Shanghai'
     const weekStart = requestedWeekStart || mondayOf(localDate(now(), timezone))
     const weekEnd = shiftDate(weekStart, 6)
-    const startUtc = sqlUtc(startOfLocalDate(weekStart, timezone))
-    const endUtc = sqlUtc(startOfLocalDate(shiftDate(weekStart, 7), timezone))
-    const records = await repository.listCompletedInRange(userId, startUtc, endUtc)
+    const records = await repository.listCompletedByPlanDateRange(userId, weekStart, shiftDate(weekStart, 7))
     const byDate = new Map()
     for (const record of records) {
-      const date = localDate(new Date(readUtc(record.completed_at)), timezone)
+      const date = record.plan_date
       if (!byDate.has(date)) byDate.set(date, record.id)
     }
     const days = Array.from({ length: 7 }, (_, index) => {
@@ -94,13 +92,13 @@ function createTrainingSessionsService(options = {}) {
   }
 
   async function currentStreak(userId, timezone, today) {
-    const beforeUtc = sqlUtc(startOfLocalDate(shiftDate(today, 1), timezone))
+    const beforeDate = shiftDate(today, 1)
     let cursor = null, expected = today, streak = 0, previousDate = null
     for (;;) {
-      const rows = await repository.listRecentCompletions(userId, beforeUtc, cursor, 100)
+      const rows = await repository.listRecentPlanDates(userId, beforeDate, cursor, 100)
       if (!rows.length) return streak
       for (const row of rows) {
-        const date = localDate(new Date(readUtc(row.completed_at)), timezone)
+        const date = row.plan_date
         if (date === previousDate) continue
         previousDate = date
         if (streak === 0 && date !== expected) {
@@ -113,7 +111,7 @@ function createTrainingSessionsService(options = {}) {
       }
       if (rows.length < 100) return streak
       const last = rows.at(-1)
-      cursor = { completedAt: sqlUtc(last.completed_at), id: last.id }
+      cursor = { planDate: last.plan_date, id: last.id }
     }
   }
 

@@ -105,17 +105,16 @@ test('completion, immutable snapshots, idempotency, isolation, history and timez
         .sort((a, b) => b.completed_at.localeCompare(a.completed_at))
       return { total: rows.length, rows: rows.slice((filters.page - 1) * filters.pageSize, filters.page * filters.pageSize) }
     },
-    async listCompletedInRange(userId, start, end) {
+    async listCompletedByPlanDateRange(userId, start, end) {
       return [...records.values()].filter((r) => r.user_id === userId && !r.deleted_at &&
-        r.completed_at >= start.replace(' ', 'T') + 'Z' &&
-        r.completed_at < end.replace(' ', 'T') + 'Z')
-        .map((r) => ({ id: r.id, completed_at: r.completed_at }))
+        r.plan_date >= start && r.plan_date < end)
+        .map((r) => ({ id: r.id, plan_date: r.plan_date }))
     },
-    async listRecentCompletions(userId, beforeUtc, cursor, limit) {
+    async listRecentPlanDates(userId, beforeDate, cursor, limit) {
       return [...records.values()].filter((r) => r.user_id === userId && !r.deleted_at &&
-        r.completed_at < beforeUtc.replace(' ', 'T') + 'Z')
-        .sort((a, b) => b.completed_at.localeCompare(a.completed_at))
-        .slice(0, limit).map((r) => ({ id: r.id, completed_at: r.completed_at }))
+        r.plan_date < beforeDate)
+        .sort((a, b) => b.plan_date.localeCompare(a.plan_date)||b.id.localeCompare(a.id))
+        .slice(0, limit).map((r) => ({ id: r.id, plan_date: r.plan_date }))
     },
     async softDelete(userId, id) {
       const row = records.get(id)
@@ -205,7 +204,7 @@ test('completion, immutable snapshots, idempotency, isolation, history and timez
     assert.equal(list.body.data.items[0].id, recordId)
     assert.equal((await request('GET', '/training-history', userB)).body.data.total, 0)
   })
-  await t.test('week uses user local date and counts a day once', async () => {
+  await t.test('week highlights the plan date and counts a day once', async () => {
     const secondId = randomUUID()
     records.set(secondId, {
       ...records.get(recordId), id: secondId, key: 'another-plan',
@@ -215,8 +214,8 @@ test('completion, immutable snapshots, idempotency, isolation, history and timez
     assert.equal(week.body.data.weekStart, '2026-09-14')
     assert.equal(week.body.data.days.length, 7)
     assert.equal(week.body.data.completedCount, 1)
-    assert.equal(week.body.data.days[5].date, '2026-09-19')
-    assert.equal(week.body.data.days[5].recordId, recordId)
+    assert.equal(week.body.data.days[4].date, '2026-09-18')
+    assert.equal(week.body.data.days[4].recordId, recordId)
     assert.equal((await request('GET', '/training-stats/week', userB)).body.data.completedCount, 0)
     assert.equal((await request('GET', '/training-stats/weekly?weekStart=2026-09-14&timezone=Asia/Shanghai', userA)).status, 200)
     assert.equal((await request('GET', '/training-stats/weekly?timezone=UTC', userA)).status, 400)

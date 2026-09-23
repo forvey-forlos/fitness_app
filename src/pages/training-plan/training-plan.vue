@@ -57,12 +57,12 @@
                     <label v-for="method in action.recordMethods" :key="'target-'+method"><text>{{ recordMethodLabel(method) }}</text><input v-model="action.targetMetrics[method]" :disabled="todayCompleted" :type="metricInputType(method)" maxlength="8" placeholder="0"/></label>
                     <view class="group-action-placeholder"/>
                   </view>
-                  <view v-for="(group,groupIndex) in action.actualGroups" :key="group.id" class="metric-row actual-row" :style="metricGridStyle(action)">
+                  <view v-for="(group,groupIndex) in (currentPlan?action.actualGroups:[])" :key="group.id" class="metric-row actual-row" :style="metricGridStyle(action)">
                     <text class="row-label">{{ groupIndex+1 }}组</text>
                     <label v-for="method in action.recordMethods" :key="group.id+'-'+method"><text>{{ recordMethodLabel(method) }}</text><input v-model="group.values[method]" :disabled="todayCompleted" :type="metricInputType(method)" maxlength="8" placeholder="输入"/></label>
                     <text v-if="!todayCompleted" class="group-remove" @tap="removeGroup(action,groupIndex)">×</text><view v-else class="group-action-placeholder"/>
                   </view>
-                  <button v-if="!todayCompleted" class="add-group" hover-class="pressed" @tap="addGroup(action)">＋ 新增一组</button>
+                  <button v-if="currentPlan&&!todayCompleted" class="add-group" hover-class="pressed" @tap="addGroup(action)">＋ 新增一组</button>
                 </view>
               </view>
               <view v-else class="action-empty"><view>⌁</view><text>尚未添加具体动作</text><text>动作选项来自“动作管理”页面</text><button hover-class="pressed" @tap="addAction">从动作库添加</button></view>
@@ -70,7 +70,7 @@
             <view v-else class="part-empty"><view>＋</view><text>先从左侧添加训练部位</text><text>可选择动作管理中已有动作的部位</text></view>
           </view>
         </view>
-        <button class="complete-button" :class="{update:currentPlan}" :disabled="saving||loading" hover-class="pressed" @tap="savePlan">{{ todayCompleted?'该日训练已完成':currentPlan?'保存计划修改':'完成训练' }}</button>
+        <button class="complete-button" :class="{update:currentPlan}" :disabled="saving||loading" hover-class="pressed" @tap="savePlan">{{ todayCompleted?'该日训练已完成':currentPlan?'保存计划修改':'创建训练计划' }}</button>
         <button v-if="currentPlan&&!todayCompleted" class="complete-button update" :disabled="completing" hover-class="pressed" @tap="completeTraining">{{ completing?'正在完成训练…':'完成该日训练' }}</button>
       </view>
     </view>
@@ -267,18 +267,18 @@ function payload(){
     planDate:selectedDate.value,name:null,durationMinutes:estimatedDuration.value,
     exercises:planParts.value.flatMap(part=>part.actions.map(action=>{
       const targetMetrics=Object.fromEntries(action.recordMethods.map(method=>[method,optionalNumber(action.targetMetrics[method],method==='reps')]))
-      const actualGroups=action.actualGroups.map(group=>({values:Object.fromEntries(action.recordMethods.map(method=>[method,optionalNumber(group.values[method],method==='reps')]))}))
-      const first=actualGroups[0]?.values||{}
+      const actualGroups=currentPlan.value?action.actualGroups.map(group=>({values:Object.fromEntries(action.recordMethods.map(method=>[method,optionalNumber(group.values[method],method==='reps')]))})):null
+      const first=actualGroups?.[0]?.values||{}
       return{exerciseId:action.exerciseId,variantId:action.variantId,bodyPart:part.key,recordMethods:[...action.recordMethods],targetMetrics,actualGroups,
-        sets:actualGroups.length,reps:targetMetrics.reps??null,weight:targetMetrics.weight??null,
-        actual:{kg:first.weight??null,reps:first.reps??null,sets:actualGroups.length},
+        sets:actualGroups?.length||null,reps:targetMetrics.reps??null,weight:targetMetrics.weight??null,
+        actual:actualGroups?{kg:first.weight??null,reps:first.reps??null,sets:actualGroups.length}:null,
         restSeconds:action.restSeconds,notes:action.notes,sortOrder:++sortOrder}
     }))
   }
 }
 function validPayload(data){
   if(!data.exercises.length){uni.showToast({title:'请至少添加一个训练动作',icon:'none'});return false}
-  if(data.exercises.some(item=>[item.sets,item.reps,item.weight,item.restSeconds,...Object.values(item.targetMetrics),...item.actualGroups.flatMap(group=>Object.values(group.values))].some(Number.isNaN))){uni.showToast({title:'训练数据格式不正确',icon:'none'});return false}
+  if(data.exercises.some(item=>[item.sets,item.reps,item.weight,item.restSeconds,...Object.values(item.targetMetrics),...(item.actualGroups||[]).flatMap(group=>Object.values(group.values))].some(Number.isNaN))){uni.showToast({title:'训练数据格式不正确',icon:'none'});return false}
   return true
 }
 function hasUnsavedPlan(){return draftSignature()!==savedDraftSignature.value}

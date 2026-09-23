@@ -86,7 +86,10 @@ function validateWrite(req, res, next, update = false) {
         errors.push({ field: prefix + '.recordMethods', message: '记录方式不合法' })
       }
       if (methods && !validMetricObject(item.targetMetrics, methods, true)) errors.push({ field: prefix + '.targetMetrics', message: '计划指标与记录方式不匹配' })
-      if (methods && !validGroups(item.actualGroups, methods, true)) errors.push({ field: prefix + '.actualGroups', message: '实际组数据与记录方式不匹配' })
+      if (methods && item.actualGroups !== undefined && item.actualGroups !== null &&
+          !validGroups(item.actualGroups, methods, true)) {
+        errors.push({ field: prefix + '.actualGroups', message: '实际组数据与记录方式不匹配' })
+      }
       if (!Number.isInteger(item.sortOrder) || item.sortOrder < 1 || item.sortOrder > 1000 ||
           orders.has(item.sortOrder)) {
         errors.push({ field: prefix + '.sortOrder', message: '排序号须为不重复的正整数' })
