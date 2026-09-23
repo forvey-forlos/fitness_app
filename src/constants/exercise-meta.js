@@ -5,10 +5,10 @@ export const bodyPartOptions=[
 ]
 
 export const recordMethodOptions=[
-  {key:'weight',name:'重量'},{key:'reps',name:'次数'},{key:'distance',name:'距离'},
-  {key:'duration',name:'持续时间'},{key:'speed',name:'速度'},{key:'incline',name:'坡度'},
-  {key:'assistance_weight',name:'辅助重量'},{key:'rir',name:'RIR'},{key:'rpe',name:'RPE'},
-  {key:'angle',name:'角度'},{key:'other',name:'其他'}
+  {key:'weight',name:'重量',unit:'kg'},{key:'reps',name:'次数',unit:'次'},{key:'distance',name:'距离',unit:'km'},
+  {key:'duration',name:'持续时间',unit:'分钟'},{key:'speed',name:'速度',unit:'km/h'},{key:'incline',name:'坡度',unit:'%'},
+  {key:'assistance_weight',name:'辅助重量',unit:'kg'},{key:'rir',name:'RIR',unit:'次'},{key:'rpe',name:'RPE',unit:'分'},
+  {key:'angle',name:'角度',unit:'°'},{key:'other',name:'其他',unit:''}
 ]
 
 export const equipmentOptions=[
@@ -30,6 +30,8 @@ export const muscleOptions=[
 
 export const bodyPartName=key=>bodyPartOptions.find(item=>item.key===key)?.name||key
 export const recordMethodName=key=>recordMethodOptions.find(item=>item.key===key)?.name||key
+export const recordMethodUnit=key=>recordMethodOptions.find(item=>item.key===key)?.unit||''
+export const recordMethodLabel=key=>{const name=recordMethodName(key),unit=recordMethodUnit(key);return unit?`${name}（${unit}）`:name}
 export const equipmentName=key=>equipmentOptions.find(item=>item.key===key)?.name||key||'其他'
 export const muscleName=key=>muscleOptions.find(item=>item.key===key)?.name||key
 

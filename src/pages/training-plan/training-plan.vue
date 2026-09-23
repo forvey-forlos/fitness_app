@@ -51,15 +51,15 @@
                     <view class="action-tools"><text class="remove-action" @tap="removeAction(action)">移除</text><view class="drag-handle" @touchstart.stop.prevent="startTouchDrag($event,actionIndex)" @touchmove.stop.prevent="moveTouchDrag" @touchend.stop="finishDrag" @mousedown.stop.prevent="startMouseDrag($event,actionIndex)">⠿</view></view>
                   </view>
                   <picker v-if="action.variants.length" :range="action.variants" range-key="name" @change="selectVariant(action,$event)"><view class="method-caption"><text>动作变式：{{ action.variant?.name||'默认' }}</text><text>选择 ›</text></view></picker>
-                  <view class="method-caption" @tap="editRecordMethods(action)"><text>记录方式：{{ action.recordMethods.map(recordMethodName).join('、') }}</text><text>{{ todayCompleted?'已锁定':'调整 ›' }}</text></view>
+                  <view class="method-caption" @tap="editRecordMethods(action)"><text>记录方式：{{ action.recordMethods.map(recordMethodLabel).join('、') }}</text><text>{{ todayCompleted?'已锁定':'调整 ›' }}</text></view>
                   <view class="metric-row target-row" :style="metricGridStyle(action)">
                     <text class="row-label">计划</text>
-                    <label v-for="method in action.recordMethods" :key="'target-'+method"><text>{{ recordMethodName(method) }}</text><input v-model="action.targetMetrics[method]" :disabled="todayCompleted" :type="metricInputType(method)" maxlength="8" placeholder="0"/></label>
+                    <label v-for="method in action.recordMethods" :key="'target-'+method"><text>{{ recordMethodLabel(method) }}</text><input v-model="action.targetMetrics[method]" :disabled="todayCompleted" :type="metricInputType(method)" maxlength="8" placeholder="0"/></label>
                     <view class="group-action-placeholder"/>
                   </view>
                   <view v-for="(group,groupIndex) in action.actualGroups" :key="group.id" class="metric-row actual-row" :style="metricGridStyle(action)">
                     <text class="row-label">{{ groupIndex+1 }}组</text>
-                    <label v-for="method in action.recordMethods" :key="group.id+'-'+method"><text>{{ recordMethodName(method) }}</text><input v-model="group.values[method]" :disabled="todayCompleted" :type="metricInputType(method)" maxlength="8" placeholder="输入"/></label>
+                    <label v-for="method in action.recordMethods" :key="group.id+'-'+method"><text>{{ recordMethodLabel(method) }}</text><input v-model="group.values[method]" :disabled="todayCompleted" :type="metricInputType(method)" maxlength="8" placeholder="输入"/></label>
                     <text v-if="!todayCompleted" class="group-remove" @tap="removeGroup(action,groupIndex)">×</text><view v-else class="group-action-placeholder"/>
                   </view>
                   <button v-if="!todayCompleted" class="add-group" hover-class="pressed" @tap="addGroup(action)">＋ 新增一组</button>
@@ -70,7 +70,7 @@
             <view v-else class="part-empty"><view>＋</view><text>先从左侧添加训练部位</text><text>可选择动作管理中已有动作的部位</text></view>
           </view>
         </view>
-        <button class="complete-button" :class="{update:currentPlan}" :disabled="saving||loading" hover-class="pressed" @tap="savePlan">{{ todayCompleted?'该日训练已完成':currentPlan?'保存计划修改':'创建训练计划' }}</button>
+        <button class="complete-button" :class="{update:currentPlan}" :disabled="saving||loading" hover-class="pressed" @tap="savePlan">{{ todayCompleted?'该日训练已完成':currentPlan?'保存计划修改':'完成训练' }}</button>
         <button v-if="currentPlan&&!todayCompleted" class="complete-button update" :disabled="completing" hover-class="pressed" @tap="completeTraining">{{ completing?'正在完成训练…':'完成该日训练' }}</button>
       </view>
     </view>
@@ -80,7 +80,7 @@
         <checkbox-group class="method-options" @change="changeMethodDraft">
           <label v-for="option in recordMethodOptions" :key="option.key">
             <checkbox :value="option.key" :checked="methodDraft.includes(option.key)" color="#7775bd"/>
-            <text>{{ option.name }}</text>
+            <text>{{ recordMethodLabel(option.key) }}</text>
           </label>
         </checkbox-group>
         <view class="method-dialog-actions">
@@ -97,7 +97,7 @@ import { computed,ref } from 'vue'
 import { onHide,onLoad,onShow,onUnload } from '@dcloudio/uni-app'
 import { getExercises } from '../../api/exercises'
 import { USER_KEY } from '../../api/auth'
-import { bodyPartOptions,recordMethodOptions,recordMethodName } from '../../constants/exercise-meta'
+import { bodyPartOptions,recordMethodOptions,recordMethodLabel } from '../../constants/exercise-meta'
 import {
   completeTrainingPlan, createTrainingPlan, deleteTrainingPlan,
   listTrainingPlans, updateTrainingPlan

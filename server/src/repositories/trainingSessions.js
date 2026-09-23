@@ -83,7 +83,7 @@ function createTrainingSessionsRepository(pool) {
                   '(id, session_id, exercise_id, exercise_variant_id, exercise_name_snapshot, exercise_variant_name_snapshot, category_snapshot,',
                   'muscle_group_snapshot, equipment_snapshot, primary_muscles_snapshot, secondary_muscles_snapshot, sort_order, sets, actual_sets, reps, actual_reps,',
                   'weight, actual_weight, body_part_snapshot, record_methods, target_metrics, actual_groups, rest_seconds, notes, created_at)',
-                  'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(3))'].join(' '),
+                  'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(3))'].join(' '),
                 [item.id, sessionId, item.exercise_id, item.exercise_variant_id, item.exercise_name, item.exercise_variant_name,
                   item.category, item.muscle_group, item.equipment,
                   item.primary_muscles ? (typeof item.primary_muscles === 'string' ? item.primary_muscles : JSON.stringify(item.primary_muscles)) : null,
