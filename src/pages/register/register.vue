@@ -60,6 +60,20 @@
       </button>
       <view class="login-tip"><text>已有账户？</text><text class="login-link" @tap="goBack">返回登录</text></view>
     </view>
+
+    <view v-if="registeredAccount" class="success-overlay">
+      <view class="success-card">
+        <view class="success-mark">✓</view>
+        <text class="success-kicker">ACCOUNT CREATED</text>
+        <text class="success-title">账户创建成功</text>
+        <text class="success-copy">这是你的登录账号，请妥善保存</text>
+        <view class="account-code" @tap="copyAccount"><text>{{ registeredAccount }}</text><text>复制</text></view>
+        <view class="success-actions">
+          <button hover-class="button-pressed" @tap="copyAccount">复制账号</button>
+          <button hover-class="button-pressed" @tap="goLoginWithAccount">前往登录</button>
+        </view>
+      </view>
+    </view>
   </view>
 </template>
 
@@ -72,7 +86,7 @@ import { getUsernameError, sanitizeUsername } from '../../utils/username'
 const THEME_STORAGE_KEY='fit_note_theme_index'
 
 const username=ref(''),password=ref(''),confirmPassword=ref('')
-const showPassword=ref(false),showConfirm=ref(false),loading=ref(false),focusField=ref('')
+const showPassword=ref(false),showConfirm=ref(false),loading=ref(false),focusField=ref(''),registeredAccount=ref('')
 const errors=reactive({username:'',password:'',confirm:''})
 const themes=[
   {accent:'#6658ec',accent2:'#a55eea',bgA:'#111126',bgB:'#211b4b',glow:'102,88,236'},
@@ -95,27 +109,37 @@ function switchTheme(){if(themeChanging.value)return;const next=(themeIndex.valu
 function syncStoredTheme(){const stored=Number(uni.getStorageSync(THEME_STORAGE_KEY));if(!Number.isInteger(stored)||stored<0||stored>=themes.length||stored===themeIndex.value)return;themeChanging.value=false;themeIndex.value=stored;uiThemeIndex.value=stored;pendingTheme.value=themes[stored]}
 onShow(syncStoredTheme)
 function goBack(){uni.navigateBack({fail:()=>uni.redirectTo({url:'/pages/login/login'})})}
+
 async function submit(){
-  if(!validateUsername()||!validatePassword()||!validateConfirm())return
+  if(loading.value||!validateUsername()||!validatePassword()||!validateConfirm())return
   loading.value=true
   try{
     const result=await register({displayName:username.value,password:password.value})
-    const accountCode=result?.user?.accountCode
-    if(!accountCode)throw new Error('注册响应缺少登录账号')
+    const accountCode=String(result?.user?.accountCode||result?.accountCode||'').trim()
+    if(!/^[1-9]\d{7}$/.test(accountCode))throw new Error('注册响应缺少有效登录账号')
     uni.setStorageSync('fit_note_pending_account_code',accountCode)
+    registeredAccount.value=accountCode
     password.value=''
     confirmPassword.value=''
-    uni.showModal({title:'账户创建成功',content:`你的登录账号是 ${accountCode}\n请妥善保存，登录时需使用该账号。`,showCancel:false,confirmText:'复制并登录',success:()=>uni.setClipboardData({data:accountCode,complete:()=>uni.reLaunch({url:'/pages/login/login'})})})
+    showPassword.value=false
+    showConfirm.value=false
+    uni.hideKeyboard()
   }catch(error){
-    uni.showToast({title:error.message||'注册失败，请稍后重试',icon:'none'})
+    uni.showToast({title:error?.message||'注册失败，请稍后重试',icon:'none'})
   }finally{loading.value=false}
 }
+function copyAccount(){
+  if(!registeredAccount.value)return
+  uni.setClipboardData({data:registeredAccount.value,success:()=>uni.showToast({title:'账号已复制',icon:'success'})})
+}
+function goLoginWithAccount(){uni.reLaunch({url:'/pages/login/login'})}
 </script>
 
 <style scoped>
 @property --accent{syntax:'<color>';inherits:true;initial-value:#6658ec}
 @property --accent-2{syntax:'<color>';inherits:true;initial-value:#a55eea}
 page{background:#f7f8fc}.page{position:relative;transition:--accent .82s cubic-bezier(.3,.7,.15,1),--accent-2 .82s cubic-bezier(.3,.7,.15,1);min-height:100vh;color:#182038;background:#f7f8fc}.mobile-hero{position:relative;height:355rpx;overflow:hidden;background:linear-gradient(145deg,#eef0ff,#fff3ec)}.mobile-ring{position:absolute;width:390rpx;height:390rpx;left:-190rpx;top:-170rpx;border:66rpx solid rgba(var(--glow-rgb),.14);border-radius:50%}.mobile-orb{position:absolute;width:280rpx;height:280rpx;right:-50rpx;top:80rpx;border-radius:50%;background:var(--accent);box-shadow:0 0 80rpx rgba(var(--glow-rgb),.22)}.brand{position:absolute;left:52rpx;top:95rpx;display:flex;align-items:center;gap:18rpx;color:#3c4561;font-size:25rpx;font-weight:700;letter-spacing:4rpx}.brand-mark{width:43rpx;height:43rpx;border-radius:70% 30% 70% 30%;background:linear-gradient(135deg,var(--accent) 50%,var(--accent-2) 50%);transform:rotate(-12deg)}.back{position:absolute;z-index:5;left:34rpx;top:calc(var(--status-bar-height) + 20rpx);display:flex;align-items:center;gap:8rpx;color:#525a70;font-size:25rpx}.back>text:first-child{font-size:48rpx;line-height:1}.panel{position:relative;z-index:3;margin-top:-48rpx;min-height:calc(100vh - 307rpx);padding:48rpx 48rpx 34rpx;border-radius:58rpx 58rpx 0 0;background:#fff}.eyebrow,.title,.subtitle,.label,.hint{display:block}.eyebrow{color:var(--accent);font-size:21rpx;font-weight:700;letter-spacing:5rpx}.title{margin-top:11rpx;font-size:48rpx;font-weight:750}.subtitle{margin:12rpx 0 30rpx;color:#7b8498;font-size:25rpx}.form-item{margin-bottom:22rpx}.form-item.last{margin-bottom:8rpx}.label{margin:0 0 11rpx 6rpx;color:var(--accent);transition:color .82s ease;font-size:24rpx;font-weight:600}.input-box{height:92rpx;display:flex;align-items:center;gap:18rpx;padding:0 26rpx;border:3rpx solid #e7e9f1;border-radius:26rpx;background:#fafbfe}.input-box.focused{border-color:var(--accent);background:#fff;box-shadow:0 0 0 7rpx rgba(var(--glow-rgb),.09)}.input-box.invalid{border-color:#e7505a}.input-icon{width:32rpx;color:#9299aa;font-size:34rpx;text-align:center}.lock{font-size:27rpx}.input{flex:1;height:100%;color:#182038;font-size:27rpx}.placeholder{color:#b4b9c7}.clear{padding:10rpx;color:#8d95a8;font-size:34rpx}.eye{padding:10rpx;color:var(--accent);transition:color .82s ease;font-size:22rpx}.hint{min-height:30rpx;margin:8rpx 6rpx 0;color:var(--accent);opacity:.68;transition:color .82s ease;font-size:20rpx;line-height:30rpx}.hint.error{color:#e7505a;opacity:1}.hint.success{color:#1aa978;opacity:1}.hint-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10rpx}.hint-row .hint{flex:1}.strength{display:flex;gap:5rpx;margin-top:18rpx}.strength i{width:22rpx;height:6rpx;border-radius:6rpx;background:#e2e5ec}.strength i.active{background:var(--accent)}.register-button{height:98rpx;margin-top:28rpx;border:0;border-radius:28rpx;color:#fff;background:linear-gradient(100deg,var(--accent),var(--accent-2));box-shadow:0 22rpx 42rpx rgba(var(--glow-rgb),.25);font-size:28rpx;font-weight:700;letter-spacing:5rpx}.register-button:after{border:0}.button-pressed{transform:scale(.985);opacity:.92}.spinner{width:34rpx;height:34rpx;margin:auto;border:4rpx solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}.login-tip{display:flex;justify-content:center;gap:10rpx;margin-top:24rpx;color:#9399a8;font-size:22rpx}.login-link{color:var(--accent);font-weight:600}.eyebrow,.label{display:inline-block;width:max-content;color:var(--accent);background-image:linear-gradient(100deg,var(--accent),var(--accent-2));background-clip:text;-webkit-background-clip:text;-webkit-text-fill-color:transparent;transition:color .82s ease,background-image .82s ease}.music-bg,.theme-wave,.theme-hitarea{display:none}@keyframes spin{to{transform:rotate(360deg)}}
+.success-overlay{position:fixed;z-index:60;inset:0;display:flex;align-items:center;justify-content:center;box-sizing:border-box;padding:36rpx;background:rgba(9,11,28,.66);backdrop-filter:blur(18rpx);animation:successFade .24s ease}.success-card{width:min(620rpx,430px);box-sizing:border-box;padding:48rpx 42rpx 40rpx;border:1rpx solid rgba(255,255,255,.78);border-radius:38rpx;background:rgba(255,255,255,.96);box-shadow:0 34rpx 100rpx rgba(0,0,0,.3),0 0 65rpx rgba(var(--glow-rgb),.3);text-align:center;animation:successRise .36s cubic-bezier(.2,.85,.3,1)}.success-mark{display:grid;place-items:center;width:82rpx;height:82rpx;margin:0 auto 22rpx;border-radius:28rpx;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:0 14rpx 30rpx rgba(var(--glow-rgb),.28);font-size:38rpx;font-weight:800}.success-kicker,.success-title,.success-copy{display:block}.success-kicker{color:var(--accent);font-size:17rpx;font-weight:800;letter-spacing:4rpx}.success-title{margin-top:9rpx;color:#252b3d;font-size:36rpx;font-weight:850}.success-copy{margin-top:12rpx;color:#8a91a1;font-size:20rpx}.account-code{display:flex;align-items:center;justify-content:space-between;margin:28rpx 0;padding:22rpx 25rpx;border:2rpx solid rgba(var(--glow-rgb),.18);border-radius:21rpx;background:var(--pale,#f5f4fc)}.account-code text:first-child{color:#252b3d;font-size:39rpx;font-weight:900;letter-spacing:8rpx}.account-code text:last-child{color:var(--accent);font-size:19rpx;font-weight:750}.success-actions{display:grid;grid-template-columns:1fr 1fr;gap:14rpx}.success-actions button{height:70rpx;margin:0;border:0;border-radius:20rpx;color:var(--accent);background:rgba(var(--glow-rgb),.09);font-size:21rpx;font-weight:750;line-height:70rpx}.success-actions button:last-child{color:#fff;background:linear-gradient(100deg,var(--accent),var(--accent-2))}.success-actions button::after{border:0}@keyframes successFade{from{opacity:0}}@keyframes successRise{from{opacity:0;transform:translateY(28rpx) scale(.96)}}
 @media(min-width:900px){
   .page{display:flex;align-items:center;justify-content:center;overflow:hidden;padding:44px;background:radial-gradient(circle at 50% 48%,var(--bg-b),var(--bg-a) 68%)}.mobile-hero{position:absolute;inset:0;height:auto;background:transparent}.mobile-ring,.mobile-orb{display:none}.brand{left:56px;top:42px;color:rgba(255,255,255,.78)}.back{left:55px;top:78px;color:rgba(255,255,255,.75);cursor:pointer}.back>text:first-child{font-size:30px}.back-label{font-size:12px}
   .eyebrow,.login-link,.register-button{transition:color .82s ease,background-color .82s ease,box-shadow .82s ease}.input-box{transition:border-color .42s ease,box-shadow .42s ease,background-color .22s ease}.strength i{transition:background-color .82s ease}.panel{transition:box-shadow .82s ease}

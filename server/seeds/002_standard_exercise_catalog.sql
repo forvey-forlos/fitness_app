@@ -14,8 +14,16 @@ ON DUPLICATE KEY UPDATE
   body_part=VALUES(body_part);
 
 UPDATE exercises SET
-  default_display_name_zh = CASE WHEN catalog_key='seated_leg_press' THEN '腿举' ELSE name END,
-  default_display_name_normalized = CASE WHEN catalog_key='seated_leg_press' THEN '腿举' ELSE name_normalized END,
+  default_display_name_zh = CASE catalog_key
+    WHEN 'seated_leg_press' THEN '倒蹬机'
+    WHEN 'machine_chest_fly' THEN '正向蝴蝶机'
+    ELSE name
+  END,
+  default_display_name_normalized = CASE catalog_key
+    WHEN 'seated_leg_press' THEN '倒蹬机'
+    WHEN 'machine_chest_fly' THEN '正向蝴蝶机'
+    ELSE name_normalized
+  END,
   standard_name_en = CASE catalog_key
     WHEN 'barbell_bench_press' THEN 'Barbell Bench Press' WHEN 'incline_dumbbell_bench_press' THEN 'Incline Dumbbell Bench Press'
     WHEN 'machine_chest_fly' THEN 'Machine Chest Fly' WHEN 'push_up' THEN 'Push-Up'
@@ -77,7 +85,13 @@ VALUES
   ('10000000-0000-4000-8000-000000000046',NULL,'辅助引体向上','辅助引体向上','assisted_pull_up','Assisted Pull-Up','辅助引体向上','辅助引体向上',
    JSON_ARRAY('back'),JSON_ARRAY('assistance_weight','reps'),'back','back',JSON_ARRAY('latissimus_dorsi'),JSON_ARRAY('teres_major','rhomboids','trapezius','biceps'),JSON_ARRAY(),'machine','strength',460,1),
   ('10000000-0000-4000-8000-000000000047',NULL,'哑铃上举','哑铃上举','dumbbell_overhead_press','Dumbbell Overhead Press','哑铃上举','哑铃上举',
-   JSON_ARRAY('shoulder'),JSON_ARRAY('weight','reps'),'shoulder','shoulder',JSON_ARRAY('anterior_deltoid','lateral_deltoid'),JSON_ARRAY('triceps','trapezius'),JSON_ARRAY(),'dumbbell','strength',470,1)
+   JSON_ARRAY('shoulder'),JSON_ARRAY('weight','reps'),'shoulder','shoulder',JSON_ARRAY('anterior_deltoid','lateral_deltoid'),JSON_ARRAY('triceps','trapezius'),JSON_ARRAY(),'dumbbell','strength',470,1),
+  ('10000000-0000-4000-8000-000000000048',NULL,'反向蝴蝶机','反向蝴蝶机','reverse_butterfly_leg_machine','Reverse Butterfly Leg Machine','反向蝴蝶机','反向蝴蝶机',
+   JSON_ARRAY('legs','glutes'),JSON_ARRAY('weight','reps'),'legs','legs',JSON_ARRAY('quadriceps','gluteus_maximus'),JSON_ARRAY('hamstrings','adductors'),JSON_ARRAY(),'machine','strength',480,1),
+  ('10000000-0000-4000-8000-000000000049',NULL,'绳索Y举','绳索y举','cable_y_raise','Cable Y Raise','绳索Y举','绳索y举',
+   JSON_ARRAY('shoulder','back'),JSON_ARRAY('weight','reps'),'shoulder','shoulder',JSON_ARRAY('lateral_deltoid','trapezius'),JSON_ARRAY('anterior_deltoid','rotator_cuff','serratus_anterior'),JSON_ARRAY(),'cable','strength',490,1),
+  ('10000000-0000-4000-8000-000000000050',NULL,'坐姿腿弯举','坐姿腿弯举','seated_leg_curl','Seated Leg Curl','坐姿腿弯举','坐姿腿弯举',
+   JSON_ARRAY('legs'),JSON_ARRAY('weight','reps'),'legs','legs',JSON_ARRAY('hamstrings'),JSON_ARRAY('calves'),JSON_ARRAY(),'machine','strength',500,1)
 ON DUPLICATE KEY UPDATE
   standard_name_en=VALUES(standard_name_en), default_display_name_zh=VALUES(default_display_name_zh),
   catalog_key=VALUES(catalog_key),
@@ -104,6 +118,14 @@ JOIN (
   SELECT 'seated_hip_abduction','Hip Abduction','hip abduction','en' UNION ALL
   SELECT 'seated_leg_press','倒蹬机','倒蹬机','zh-CN' UNION ALL SELECT 'seated_leg_press','腿举机','腿举机','zh-CN' UNION ALL
   SELECT 'seated_leg_press','坐姿腿举','坐姿腿举','zh-CN' UNION ALL SELECT 'seated_leg_press','Leg Press','leg press','en' UNION ALL
+  SELECT 'machine_chest_fly','蝴蝶机夹胸','蝴蝶机夹胸','zh-CN' UNION ALL
+  SELECT 'machine_chest_fly','夹胸机','夹胸机','zh-CN' UNION ALL SELECT 'machine_chest_fly','Machine Chest Fly','machine chest fly','en' UNION ALL
+  SELECT 'reverse_butterfly_leg_machine','反向蝴蝶机（练腿）','反向蝴蝶机（练腿）','zh-CN' UNION ALL
+  SELECT 'reverse_butterfly_leg_machine','Reverse Butterfly Leg Machine','reverse butterfly leg machine','en' UNION ALL
+  SELECT 'cable_y_raise','绳索Y字举','绳索y字举','zh-CN' UNION ALL SELECT 'cable_y_raise','Cable Y Raise','cable y raise','en' UNION ALL
+  SELECT 'cable_face_pull','面拉','面拉','zh-CN' UNION ALL SELECT 'cable_face_pull','Cable Face Pull','cable face pull','en' UNION ALL
+  SELECT 'seated_leg_curl','坐式腿弯举','坐式腿弯举','zh-CN' UNION ALL
+  SELECT 'seated_leg_curl','坐姿腿屈曲','坐姿腿屈曲','zh-CN' UNION ALL SELECT 'seated_leg_curl','Seated Leg Curl','seated leg curl','en' UNION ALL
   SELECT 'leg_raise_crunch','抬腿卷腹','抬腿卷腹','zh-CN' UNION ALL SELECT 'leg_raise_crunch','Leg Raise Crunch','leg raise crunch','en' UNION ALL
   SELECT 'sit_up','仰卧起坐','仰卧起坐','zh-CN' UNION ALL SELECT 'sit_up','Sit-Up','sit-up','en' UNION ALL
   SELECT 'single_arm_seated_row','单臂绳索划船','单臂绳索划船','zh-CN' UNION ALL

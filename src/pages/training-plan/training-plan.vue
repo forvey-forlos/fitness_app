@@ -74,8 +74,30 @@
         <button v-if="currentPlan&&!todayCompleted" class="complete-button update" :disabled="completing" hover-class="pressed" @tap="completeTraining">{{ completing?'正在完成训练…':'完成该日训练' }}</button>
       </view>
     </view>
-    <view v-if="methodEditorAction" class="method-overlay" @tap.self="closeMethodEditor">
-      <view class="method-dialog">
+    <view v-if="partChooserVisible" class="method-overlay">
+      <view class="method-dialog choice-dialog" @tap.stop>
+        <view class="method-dialog-head"><view><text>添加训练部位</text><text>选择今天要训练的部位</text></view><text @tap="closePartChooser">×</text></view>
+        <scroll-view scroll-y class="choice-list">
+          <view v-for="part in availablePartChoices" :key="part.key" class="choice-item" hover-class="choice-pressed" @tap="choosePart(part)">
+            <view class="choice-symbol">{{ part.icon }}</view><view><text>{{ part.name }}</text><text>添加到今日训练</text></view><text>＋</text>
+          </view>
+        </scroll-view>
+      </view>
+    </view>
+    <view v-if="actionChooserVisible" class="method-overlay">
+      <view class="method-dialog choice-dialog" @tap.stop>
+        <view class="method-dialog-head"><view><text>添加具体动作</text><text>{{ activePart?.name || '' }} · 来自动作管理库</text></view><text @tap="closeActionChooser">×</text></view>
+        <view class="choice-search"><text>⌕</text><input v-model="actionChooserKeyword" maxlength="30" placeholder="搜索动作名称" confirm-type="search"/></view>
+        <scroll-view scroll-y class="choice-list action-choice-list">
+          <view v-for="action in availableActionChoices" :key="action.id" class="choice-item" hover-class="choice-pressed" @tap="chooseAction(action)">
+            <view class="choice-symbol">{{ activePart?.icon || '·' }}</view><view><text>{{ action.name }}</text><text>{{ equipmentName(action.equipment) }} · {{ action.recordMethods.map(recordMethodLabel).join('、') }}</text></view><text>＋</text>
+          </view>
+          <view v-if="!availableActionChoices.length" class="choice-empty">没有匹配动作，可先到“动作管理”添加</view>
+        </scroll-view>
+      </view>
+    </view>
+    <view v-if="methodEditorAction" class="method-overlay">
+      <view class="method-dialog" @tap.stop>
         <view class="method-dialog-head"><view><text>记录方式</text><text>{{ methodEditorAction.name }}</text></view><text @tap="closeMethodEditor">×</text></view>
         <checkbox-group class="method-options" @change="changeMethodDraft">
           <label v-for="option in recordMethodOptions" :key="option.key">
@@ -120,10 +142,18 @@ const workoutStartedAt=ref('')
 const savedDraftSignature=ref('')
 const dragIndex=ref(-1)
 const methodEditorAction=ref(null),methodDraft=ref([])
+const partChooserVisible=ref(false),actionChooserVisible=ref(false),actionChooserKeyword=ref('')
 let dragStartY=0,mouseCleanup=null,draftSaveTimer=null,draftHydrating=false
 const themeStyle=computed(()=>{const t=themes[themeIndex.value];return{'--accent':t.accent,'--accent-2':t.accent2,'--pale':t.pale,'--pale-2':t.pale2,'--glow-rgb':t.glow}})
 const todayText=computed(()=>new Date(selectedDate.value+'T00:00:00').toLocaleDateString('zh-CN',{month:'long',day:'numeric',weekday:'long'}))
 const activePart=computed(()=>planParts.value.find(part=>part.key===selectedPartKey.value)||null)
+const availablePartChoices=computed(()=>availableParts())
+const availableActionChoices=computed(()=>{
+  if(!activePart.value)return[]
+  const used=new Set(activePart.value.actions.map(item=>item.exerciseId))
+  const keyword=actionChooserKeyword.value.trim().toLocaleLowerCase()
+  return actionLibrary.value.filter(item=>actionParts(item).includes(activePart.value.key)&&!used.has(item.id)&&(!keyword||item.name.toLocaleLowerCase().includes(keyword)))
+})
 const totalActions=computed(()=>planParts.value.reduce((sum,part)=>sum+part.actions.length,0))
 const completedActions=computed(()=>planParts.value.reduce((sum,part)=>sum+completedInPart(part),0))
 const planTitle=computed(()=>{if(currentPlan.value?.name)return currentPlan.value.name;if(!planParts.value.length)return'训练计划';if(planParts.value.length===1)return planParts.value[0].name+'训练';return planParts.value.map(part=>part.short).join('')+'训练'})
@@ -245,9 +275,13 @@ async function load(){
   finally{loading.value=false;draftHydrating=false}
 }
 function ensureEditable(){if(!todayCompleted.value)return true;uni.showToast({title:'已完成计划不可修改',icon:'none'});return false}
-function addPart(){if(!ensureEditable())return;const available=availableParts();if(!available.length){uni.showToast({title:'训练部位已全部添加',icon:'none'});return}uni.showActionSheet({itemList:available.map(part=>part.name),success:({tapIndex})=>{const part=available[tapIndex];planParts.value.push({...part,actions:[]});selectedPartKey.value=part.key}})}
+function addPart(){if(!ensureEditable())return;if(!availablePartChoices.value.length){uni.showToast({title:'训练部位已全部添加',icon:'none'});return}partChooserVisible.value=true}
+function closePartChooser(){partChooserVisible.value=false}
+function choosePart(part){if(!part||planParts.value.some(item=>item.key===part.key))return;planParts.value.push({...part,actions:[]});selectedPartKey.value=part.key;closePartChooser()}
 function removePart(part){if(!ensureEditable())return;uni.showModal({title:`移除${part.name}？`,content:'该部位今天填写的数据会一并移除。',success:result=>{if(!result.confirm)return;planParts.value=planParts.value.filter(item=>item.key!==part.key);selectedPartKey.value=planParts.value[0]?.key||''}})}
-function addAction(){if(!ensureEditable()||!activePart.value)return;const used=activePart.value.actions.map(item=>item.exerciseId),available=actionLibrary.value.filter(item=>actionParts(item).includes(activePart.value.key)&&!used.includes(item.id));if(!available.length){uni.showToast({title:'该部位暂无更多动作，请先在动作管理添加',icon:'none'});return}uni.showActionSheet({itemList:available.map(item=>`${item.name} · ${equipmentName(item.equipment)}`),success:({tapIndex})=>activePart.value.actions.push(catalogAction(available[tapIndex],activePart.value.key))})}
+function addAction(){if(!ensureEditable()||!activePart.value)return;actionChooserKeyword.value='';if(!availableActionChoices.value.length){uni.showToast({title:'该部位暂无更多动作，请先在动作管理添加',icon:'none'});return}actionChooserVisible.value=true}
+function closeActionChooser(){actionChooserVisible.value=false;actionChooserKeyword.value=''}
+function chooseAction(action){if(!action||!activePart.value)return;activePart.value.actions.push(catalogAction(action,activePart.value.key));closeActionChooser()}
 function removeAction(action){if(!ensureEditable())return;activePart.value.actions=activePart.value.actions.filter(item=>item.id!==action.id)}
 function metricInputType(method){return method==='reps'?'number':'digit'}
 function metricGridStyle(action){return{gridTemplateColumns:`47rpx repeat(${action.recordMethods.length},minmax(82rpx,1fr)) 35rpx`}}
@@ -419,4 +453,5 @@ page{background:#f6f5fa}.page{position:relative;min-height:100vh;overflow:hidden
 @media(max-width:899px){.shell{width:100%;padding-left:24rpx;padding-right:24rpx}.hero,.content{width:100%;max-width:100%}.topbar{width:100%}.theme-badge{flex:none}.hero-head{gap:14rpx}.status{flex:none}.planner{grid-template-columns:148rpx minmax(0,1fr);gap:11rpx}.content{padding:20rpx}.action-column{padding:11rpx}.action-column-head{align-items:flex-start;gap:8rpx}.action-column-head button{padding:0 9rpx}.action-name text{max-width:190rpx}.metric-row{padding:8rpx 3rpx}.row-label{font-size:12rpx}}
 @media(min-width:900px){.part-progress-list.single-part{grid-template-columns:minmax(0,1fr)}.part-progress-list.single-part .progress-node{flex:1;min-width:0}.part-progress-list.single-part .progress-nodes{justify-content:space-between}.action-list{grid-template-columns:minmax(0,1fr)}.metric-row{grid-auto-columns:minmax(90px,1fr)}.method-caption{font-size:13px}}
 .method-overlay{position:fixed;z-index:80;inset:0;display:flex;align-items:center;justify-content:center;padding:30rpx;background:rgba(35,38,52,.42);backdrop-filter:blur(8px)}.method-dialog{width:min(650rpx,560px);max-height:82vh;padding:30rpx;box-sizing:border-box;overflow:auto;border-radius:30rpx;background:#fbfbfd;box-shadow:0 30rpx 80rpx rgba(30,33,48,.25)}.method-dialog-head{display:flex;align-items:flex-start;justify-content:space-between}.method-dialog-head>view text{display:block}.method-dialog-head>view text:first-child{font-size:29rpx;font-weight:900}.method-dialog-head>view text:last-child{margin-top:5rpx;color:#9297a5;font-size:17rpx}.method-dialog-head>text{display:grid;place-items:center;width:46rpx;height:46rpx;border-radius:50%;color:#858b9a;background:#edeef2;font-size:29rpx}.method-options{display:grid;grid-template-columns:1fr 1fr;gap:12rpx;margin-top:24rpx}.method-options label{display:flex;align-items:center;gap:10rpx;min-height:58rpx;padding:6rpx 13rpx;border:1rpx solid rgba(var(--glow-rgb),.12);border-radius:17rpx;background:#fff;color:#52596b;font-size:18rpx;font-weight:750}.method-dialog-actions{display:grid;grid-template-columns:1fr 1.2fr;gap:12rpx;margin-top:26rpx}.method-dialog-actions button{height:66rpx;line-height:66rpx;margin:0;border:0;border-radius:20rpx;color:var(--accent);background:var(--pale);font-size:18rpx;font-weight:850}.method-dialog-actions button::after{border:0}.method-dialog-actions .primary{color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent-2))}
+.choice-dialog{display:flex;flex-direction:column;overflow:hidden}.choice-list{max-height:56vh;margin-top:22rpx}.choice-item{display:grid;grid-template-columns:55rpx minmax(0,1fr) 38rpx;align-items:center;gap:14rpx;margin-bottom:11rpx;padding:15rpx;border:1rpx solid rgba(var(--glow-rgb),.12);border-radius:20rpx;background:#fff;color:var(--accent)}.choice-item>view:nth-child(2){min-width:0}.choice-item>view:nth-child(2) text{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.choice-item>view:nth-child(2) text:first-child{color:#41485a;font-size:19rpx;font-weight:800}.choice-item>view:nth-child(2) text:last-child{margin-top:4rpx;color:#969caa;font-size:14rpx;font-weight:500}.choice-item>text{font-size:27rpx;text-align:center}.choice-symbol{width:48rpx;height:48rpx;display:grid;place-items:center;border-radius:15rpx;background:var(--pale);font-size:21rpx}.choice-pressed{opacity:.72;transform:scale(.99)}.choice-search{display:flex;align-items:center;gap:10rpx;margin-top:22rpx;padding:0 17rpx;border:1rpx solid rgba(var(--glow-rgb),.16);border-radius:18rpx;background:#fff;color:var(--accent)}.choice-search input{height:70rpx;min-width:0;flex:1;color:#41485a;font-size:18rpx}.action-choice-list{margin-top:13rpx}.choice-empty{padding:46rpx 15rpx;color:#9298a6;font-size:17rpx;text-align:center}
 </style>

@@ -65,6 +65,7 @@ ORDER BY e.sort_order, e.default_display_name_zh;
 预期：
 
 - 系统目录至少包含原 32 个动作及新增的常用动作；
+- “倒蹬机”“正向蝴蝶机”“反向蝴蝶机”“绳索Y举”“绳索面拉”“坐姿腿弯举”均可在系统动作目录中检索；其中已有动作沿用原 `exercise_id`，不会产生重复目录项；
 - `高位下拉` 可以通过“高位下拉 / 下拉 / 拉背 / Lat Pulldown”检索为同一个 `exercise_id`；
 - 用户改名只更新 `user_exercise_preferences.display_name`；
 - 删除个人动作只软删除偏好，不删除系统动作；
