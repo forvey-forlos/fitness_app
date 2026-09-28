@@ -15,9 +15,9 @@ global.uni = {
 }
 
 const filename = path.resolve(__dirname, '../../src/api/request.js')
-const source = readFileSync(filename, 'utf8').replace(
-  'import.meta.env.VITE_API_BASE_URL', JSON.stringify('https://api.example.test')
-)
+const source = readFileSync(filename, 'utf8')
+  .replace('import.meta.env.VITE_API_BASE_URL', JSON.stringify('https://api.example.test'))
+  .replace('import.meta.env.PROD', 'false')
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`
 
 test('two concurrent 401 responses use one refresh and retry both original requests', async () => {

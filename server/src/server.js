@@ -3,7 +3,7 @@ require('dotenv').config()
 const createApp = require('./app')
 const { getTokenConfig } = require('./config/tokens')
 
-const port = process.env.PORT || 8080
+const port = process.env.PORT || 3000
 
 getTokenConfig() // Fail startup if token signing is not configured safely.
 

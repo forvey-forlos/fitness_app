@@ -14,13 +14,17 @@
 
 ## 配置域名
 
-复制项目根目录的 `.env.example` 为 `.env.local`，把 `VITE_API_BASE_URL` 改成真实 Sealos HTTPS 域名，不带 `/api/v1`，例如：
+API 地址不包含 `/api/v1`。项目按 Vite mode 区分环境：
 
 ```dotenv
-VITE_API_BASE_URL=https://your-service.sealos.run
+# .env.development（仅本机开发）
+VITE_API_BASE_URL=http://localhost:3000
+
+# .env.production（H5、App、微信小程序正式构建）
+VITE_API_BASE_URL=https://api.fityloop.com
 ```
 
-`.env.local` 已由 `*.local` 忽略。修改后重启 HBuilderX/Vite。微信小程序发布前，还需在微信平台配置该 HTTPS request 合法域名。
+`.env.local` 已由 `*.local` 忽略，可用于开发者自己的本地覆盖。为了避免误发布，`request.js` 在生产构建中固定使用 `https://api.fityloop.com`。修改环境文件后需要重启 HBuilderX/Vite。微信小程序发布前，还需在微信平台配置该 HTTPS request 和 uploadFile 合法域名。
 
 ## 返回值约定
 
@@ -37,8 +41,6 @@ try {
 }
 ```
 
-## 目前不是全部已联通
+## 当前联通范围
 
-当前 `getTrainingPlans()` 已适配正式认证计划列表，并默认查询设备本地当日计划；页面其他训练数据仍主要使用本地 `uni.setStorageSync`。按日期保存草稿的旧 helper、完成训练、历史和周统计仍需后续页面联调。
-
-调用 `getTrainingPlans()` 需要登录态。后续仍需按页面逐步接入计划编辑、训练完成、历史和首页聚合；不要把密码写入本地存储。
+注册、普通登录、微信登录、Token 刷新、用户资料、头像、身体数据、动作库、训练计划、训练完成、训练历史、周统计和首页聚合均通过本目录中的统一请求层访问正式后端。训练计划页面允许保存未提交的本地草稿，但正式业务数据仍以后端和 MySQL 为准；不要把密码写入本地存储。

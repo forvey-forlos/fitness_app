@@ -24,8 +24,8 @@ neither timestamp deletes audit history. All `DATETIME(3)` values are UTC:
 application connections must use a UTC session time zone when writing or reading
 them. Each migration sets its own session to UTC for default timestamps.
 
-In Sealos DevBox, first select the correct MySQL database and ensure the MySQL
-client is available. Run from the repository root; the `-p` option prompts for
+On the Ubuntu application server, first select the correct MySQL database and
+ensure the MySQL client is available. Run from the repository root; the `-p` option prompts for
 the password rather than exposing it in shell history:
 
 ```bash
@@ -34,8 +34,8 @@ mysql -h "$DB_HOST" -P "${DB_PORT:-3306}" -u "$DB_USER" -p "$DB_NAME" < server/m
 mysql -h "$DB_HOST" -P "${DB_PORT:-3306}" -u "$DB_USER" -p "$DB_NAME" < server/migrations/003_expand_username_to_30_characters.sql
 ```
 
-If the DevBox has no `mysql` client, run each SQL file in order in the Sealos
-MySQL SQL console, after selecting the target database. Do not paste secrets
+If the application server has no `mysql` client, run each SQL file in order in
+an authorized MySQL 8 client after selecting the target database. Do not paste secrets
 into the SQL editor. These files do not use `IF NOT EXISTS`: a table-already-
 exists error means stop and inspect the existing schema rather than silently
 claiming the migration succeeded.
@@ -64,13 +64,13 @@ non-sensitive sanity check, not an exact count.
 
 Migration 004 creates body_profiles after 001-003. An existing installation
 that already ran 001-003 must run only 004, not replay earlier migrations.
-From the repository root in the Sealos DevBox, with database connection
+From the repository root on the Ubuntu application server, with database connection
 variables configured, run:
 
     mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p "$DB_NAME" < server/migrations/004_create_body_profiles.sql
 
 The password is prompted; do not put it on the command line. If no MySQL
-client exists, run the SQL in the Sealos MySQL console after selecting the
+client exists, run the SQL in an authorized MySQL 8 client after selecting the
 intended database. Verify with SHOW CREATE TABLE body_profiles and SHOW INDEX
 FROM body_profiles. The user_id primary key also indexes the user foreign
 key. Measurements are nullable DECIMAL(6,2), in cm except weight in kg.

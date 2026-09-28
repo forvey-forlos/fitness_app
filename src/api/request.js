@@ -1,5 +1,7 @@
-/** 所有业务接口共用此入口；域名配置在项目根目录的 .env.local。 */
-export const BASE_URL = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '')
+/** 所有业务接口共用此入口；开发地址来自 Vite 环境文件，生产构建固定使用正式 HTTPS API。 */
+export const PRODUCTION_API_BASE_URL = 'https://api.fityloop.com'
+const configuredBaseUrl = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '')
+export const BASE_URL = import.meta.env.PROD ? PRODUCTION_API_BASE_URL : (configuredBaseUrl || PRODUCTION_API_BASE_URL)
 export const ACCESS_TOKEN_KEY = 'fit_note_access_token'
 export const REFRESH_TOKEN_KEY = 'fit_note_refresh_token'
 export const USER_KEY = 'fit_note_auth_user'
@@ -28,7 +30,7 @@ function invalidateSession(expectedToken) {
 
 function joinUrl(path) {
   if (!BASE_URL) {
-    throw new Error('尚未配置 API 地址：请在项目根目录 .env.local 设置 VITE_API_BASE_URL')
+    throw new Error('尚未配置 API 地址：请设置 VITE_API_BASE_URL')
   }
   if (!/^https?:\/\//i.test(BASE_URL)) {
     throw new Error('VITE_API_BASE_URL 必须是 http(s) 地址')
