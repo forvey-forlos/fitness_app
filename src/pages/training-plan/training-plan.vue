@@ -25,10 +25,10 @@
             <text v-else class="part-empty-tip">请在下方为该部位添加具体动作</text>
           </view>
         </view>
-        <view v-else class="hero-empty"><view>＋</view><text>在下方添加今天要训练的部位</text></view>
+        <view v-else class="hero-empty"><view>＋</view><text>点击“新建计划”开始安排训练</text></view>
       </view>
 
-      <view class="content">
+      <view v-if="contentVisible" :key="contentRevealKey" class="content" :class="{'content-emerging':contentEmerging,'content-floating':contentFloating}">
         <view class="content-head"><view><text class="section-title">训练内容</text><text class="section-caption">选择部位并录入预期与实际数据</text></view><text class="saved-tip">{{ syncText }}</text></view>
         <view class="planner">
           <view class="part-column">
@@ -72,6 +72,19 @@
         </view>
         <button class="complete-button" :class="{update:currentPlan}" :disabled="saving||loading" hover-class="pressed" @tap="savePlan">{{ todayCompleted?'该日训练已完成':currentPlan?'保存计划修改':'创建训练计划' }}</button>
         <button v-if="currentPlan&&!todayCompleted" class="complete-button update" :disabled="completing" hover-class="pressed" @tap="completeTraining">{{ completing?'正在完成训练…':'完成该日训练' }}</button>
+      </view>
+    </view>
+    <view v-if="templateChooserVisible" class="method-overlay" @tap="closeTemplateChooser">
+      <view class="method-dialog choice-dialog template-dialog" @tap.stop>
+        <view class="method-dialog-head"><view><text>创建训练计划</text><text>从空白开始，或复用最近一次同名训练</text></view><text @tap="closeTemplateChooser">×</text></view>
+        <scroll-view scroll-y class="choice-list template-choice-list">
+          <view class="choice-item template-choice-item" hover-class="choice-pressed" @tap="startBlankPlan">
+            <view class="choice-symbol">＋</view><view><text>新建计划</text><text>从空白训练内容开始</text></view><text>›</text>
+          </view>
+          <view v-for="template in historyTemplates" :key="template.id" class="choice-item template-choice-item" hover-class="choice-pressed" @tap="startFromHistory(template)">
+            <view class="choice-symbol">↺</view><view><text>{{ template.title }}</text><text>{{ template.planDate }} · 复用上次计划与预计数据</text></view><text>›</text>
+          </view>
+        </scroll-view>
       </view>
     </view>
     <view v-if="partChooserVisible" class="method-overlay">
@@ -122,7 +135,7 @@ import { USER_KEY } from '../../api/auth'
 import { bodyPartOptions,recordMethodOptions,recordMethodLabel } from '../../constants/exercise-meta'
 import {
   completeTrainingPlan, createTrainingPlan, deleteTrainingPlan,
-  listTrainingPlans, updateTrainingPlan
+  getTrainingHistory, listTrainingHistory, listTrainingPlans, updateTrainingPlan
 } from '../../api/training'
 const THEME_KEY='fit_note_theme_index'
 const cachedUser=uni.getStorageSync(USER_KEY)||{}
@@ -137,6 +150,8 @@ const legacyPart={abs:'core'}
 const equipmentLabels={barbell:'杠铃',dumbbell:'哑铃',machine:'器械',cable:'绳索',bodyweight:'徒手',other:'其他'}
 const themeIndex=ref(0),actionLibrary=ref([]),planParts=ref([]),selectedPartKey=ref('')
 const currentPlan=ref(null),selectedDate=ref(''),loading=ref(false),saving=ref(false),completing=ref(false),loadError=ref('')
+const historyTemplates=ref([]),historyLoading=ref(false),templateChooserVisible=ref(false)
+const editorRevealed=ref(false),contentEmerging=ref(false),contentFloating=ref(false),contentRevealKey=ref(0),draftPlanName=ref('')
 const completionAttempt=ref(null)
 const workoutStartedAt=ref('')
 const savedDraftSignature=ref('')
@@ -159,6 +174,7 @@ const completedActions=computed(()=>planParts.value.reduce((sum,part)=>sum+compl
 const planTitle=computed(()=>{if(currentPlan.value?.name)return currentPlan.value.name;if(!planParts.value.length)return'训练计划';if(planParts.value.length===1)return planParts.value[0].name+'训练';return planParts.value.map(part=>part.short).join('')+'训练'})
 const estimatedDuration=computed(()=>Math.max(20,totalActions.value*8))
 const todayCompleted=computed(()=>currentPlan.value?.status==='completed')
+const contentVisible=computed(()=>!!currentPlan.value||editorRevealed.value||planParts.value.length>0)
 const syncText=computed(()=>saving.value?'正在保存':loading.value?'正在同步':loadError.value?'同步失败':hasUnsavedPlan()?'本地草稿':currentPlan.value?'云端已保存':'尚未创建')
 function pad(v){return String(v).padStart(2,'0')}
 function dateKey(){const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`}
@@ -233,7 +249,9 @@ function applyPlan(plan){
   if(plan?.status==='draft'&&previousPlanId!==plan.id)workoutStartedAt.value=new Date().toISOString()
   if(!plan||plan.status==='completed')workoutStartedAt.value=''
   if(!plan||completionAttempt.value&&(completionAttempt.value.planId!==plan.id||completionAttempt.value.version!==plan.version))completionAttempt.value=null
-  if(!plan){planParts.value=[];selectedPartKey.value='';savedDraftSignature.value=draftSignature();return}
+  if(!plan){planParts.value=[];selectedPartKey.value='';draftPlanName.value='';editorRevealed.value=false;contentFloating.value=false;savedDraftSignature.value=draftSignature();return}
+  editorRevealed.value=true
+  draftPlanName.value=plan.name||''
   const byCategory=new Map()
   for(const item of plan.exercises||[]){
     const action=planAction(item),key=action.bodyPart
@@ -257,6 +275,19 @@ async function loadExerciseLibrary(){
   const orderIndex=new Map((Array.isArray(order)?order:[]).map((id,index)=>[id,index]))
   actionLibrary.value=items.sort((a,b)=>(orderIndex.get(a.id)??99999)-(orderIndex.get(b.id)??99999))
 }
+async function loadHistoryTemplates(){
+  if(historyLoading.value)return
+  historyLoading.value=true
+  try{
+    const result=await listTrainingHistory({page:1,pageSize:100})
+    const seen=new Set()
+    historyTemplates.value=(Array.isArray(result?.items)?result.items:[]).filter(item=>{
+      const title=String(item.title||item.planNameSnapshot||'').trim()
+      if(!title||seen.has(title))return false
+      seen.add(title);return true
+    }).map(item=>({...item,title:String(item.title||item.planNameSnapshot).trim()}))
+  }finally{historyLoading.value=false}
+}
 function showError(error,fallback='请求失败'){
   loadError.value=error?.message||fallback
   const title=error?.code==='EXERCISE_UNAVAILABLE'?'计划中包含已失效或无权使用的动作':loadError.value
@@ -270,7 +301,7 @@ async function load(){
   if(loading.value)return
   const ti=Number(uni.getStorageSync(THEME_KEY));themeIndex.value=Number.isInteger(ti)&&themes[ti]?ti:0
   loading.value=true;draftHydrating=true;loadError.value=''
-  try{await Promise.all([loadExerciseLibrary(),loadPlan()]);restoreLocalDraft()}
+  try{await Promise.all([loadExerciseLibrary(),loadPlan(),loadHistoryTemplates().catch(()=>{historyTemplates.value=[]})]);if(restoreLocalDraft())editorRevealed.value=true}
   catch(error){showError(error,'训练计划加载失败')}
   finally{loading.value=false;draftHydrating=false}
 }
@@ -306,13 +337,13 @@ function optionalNumber(value,integer=false){
   if(!Number.isFinite(number)||number<0||integer&&!Number.isInteger(number))return NaN
   return number
 }
-function payload(){
+function payload({includeActualGroups=false}={}){
   let sortOrder=0
   return {
-    planDate:selectedDate.value,name:null,durationMinutes:estimatedDuration.value,
+    planDate:selectedDate.value,name:draftPlanName.value||null,durationMinutes:estimatedDuration.value,
     exercises:planParts.value.flatMap(part=>part.actions.map(action=>{
       const targetMetrics=Object.fromEntries(action.recordMethods.map(method=>[method,optionalNumber(action.targetMetrics[method],method==='reps')]))
-      const actualGroups=currentPlan.value?action.actualGroups.map(group=>({values:Object.fromEntries(action.recordMethods.map(method=>[method,optionalNumber(group.values[method],method==='reps')]))})):null
+      const actualGroups=(currentPlan.value||includeActualGroups)?action.actualGroups.map(group=>({values:Object.fromEntries(action.recordMethods.map(method=>[method,optionalNumber(group.values[method],method==='reps')]))})):null
       const first=actualGroups?.[0]?.values||{}
       return{exerciseId:action.exerciseId,variantId:action.variantId,bodyPart:part.key,recordMethods:[...action.recordMethods],targetMetrics,actualGroups,
         sets:actualGroups?.length||null,reps:targetMetrics.reps??null,weight:targetMetrics.weight??null,
@@ -352,10 +383,10 @@ function requirePlanResponse(plan){
   }
   return plan
 }
-async function savePlan(){
+async function savePlan(options={}){
   if(todayCompleted.value){uni.showToast({title:'已完成计划不可修改',icon:'none'});return}
   if(saving.value)return
-  const data=payload()
+  const data=payload({includeActualGroups:options.includeActualGroups===true})
   if(!validPayload(data))return
   saving.value=true;loadError.value=''
   try{
@@ -425,7 +456,7 @@ async function completeTraining(){
 }
 function askCompletionDuration(){return new Promise(resolve=>uni.showModal({title:'完成本次训练',content:'可填写本次训练时长，留空也可以直接保存。',editable:true,placeholderText:'训练时长（分钟，可不填）',confirmText:'保存',success:result=>{if(!result.confirm){resolve(undefined);return}const value=String(result.content||'').trim();if(!value){resolve(null);return}const minutes=Number(value);resolve(Number.isInteger(minutes)&&minutes>=1&&minutes<=1440?minutes:NaN)},fail:()=>resolve(undefined)}))}
 function managePlan(){
-  if(!currentPlan.value){load();return}
+  if(!currentPlan.value){openPlanCreator();return}
   uni.showActionSheet({itemList:['刷新计划','删除计划'],success:({tapIndex})=>{
     if(tapIndex===0){loadPlan().catch(error=>showError(error,'计划刷新失败'));return}
     uni.showModal({title:`删除“${currentPlan.value.name}”？`,content:'删除后当天将恢复为无计划状态。',success:async result=>{
@@ -436,6 +467,60 @@ function managePlan(){
       finally{saving.value=false}
     }})
   }})
+}
+function revealContent(){
+  editorRevealed.value=true;contentFloating.value=false;contentEmerging.value=true;contentRevealKey.value+=1
+  setTimeout(()=>{contentEmerging.value=false;contentFloating.value=true},1500)
+}
+async function openPlanCreator(){
+  if(historyLoading.value){uni.showToast({title:'正在读取训练历史',icon:'none'});return}
+  if(!historyTemplates.value.length){
+    try{await loadHistoryTemplates()}catch(error){showError(error,'训练历史加载失败');return}
+  }
+  if(historyTemplates.value.length){templateChooserVisible.value=true;return}
+  startBlankPlan()
+}
+function closeTemplateChooser(){if(!saving.value)templateChooserVisible.value=false}
+function startBlankPlan(){
+  templateChooserVisible.value=false;draftPlanName.value='';planParts.value=[];selectedPartKey.value='';revealContent()
+}
+function historyAction(item){
+  const source=actionLibrary.value.find(action=>action.id===item.exerciseId)
+  const methods=list(item.recordMethods).length?list(item.recordMethods):(list(source?.recordMethods).length?list(source.recordMethods):['weight','reps'])
+  const groupCount=Math.max(1,list(item.actualGroups).length,Number(item.actual?.sets)||0,Number(item.sets)||0)
+  const variants=list(source?.variants),variant=variants.find(value=>value.id===item.variantId)||null
+  return{
+    id:item.exerciseId,exerciseId:item.exerciseId,
+    name:source?.name||item.exerciseNameSnapshot||'已归档动作',
+    equipment:equipmentName(source?.equipment||item.equipmentSnapshot),
+    bodyPart:item.bodyPart||actionParts(source||{})[0]||'other',
+    exerciseDefaultMethods:list(source?.recordMethods).length?list(source.recordMethods):[...methods],
+    recordMethods:[...methods],variants,variantId:item.variantId||null,variant,
+    targetMetrics:emptyValues(methods,item.targetMetrics||item.target||{}),
+    actualGroups:Array.from({length:groupCount},()=>createGroup(methods)),
+    restSeconds:item.restSeconds??null,notes:item.notes??null
+  }
+}
+async function startFromHistory(template){
+  if(saving.value)return
+  templateChooserVisible.value=false;loading.value=true;draftHydrating=true;loadError.value=''
+  try{
+    const detail=await getTrainingHistory(template.id)
+    const grouped=new Map()
+    list(detail?.exercises).forEach(item=>{
+      const action=historyAction(item),key=parts.some(part=>part.key===action.bodyPart)?action.bodyPart:'other'
+      action.bodyPart=key
+      if(!grouped.has(key))grouped.set(key,[])
+      grouped.get(key).push(action)
+    })
+    planParts.value=parts.filter(part=>grouped.has(part.key)).map(part=>({...part,actions:grouped.get(part.key)}))
+    selectedPartKey.value=planParts.value[0]?.key||''
+    draftPlanName.value=String(detail?.planNameSnapshot||detail?.title||template.title||'').trim()
+    if(!planParts.value.length){throw new Error('这条训练历史没有可复用的动作')}
+    revealContent()
+    await savePlan({includeActualGroups:true})
+  }catch(error){showError(error,'历史计划复用失败')}
+  finally{loading.value=false;draftHydrating=false}
 }
 function goBack(){uni.navigateBack({fail:()=>uni.reLaunch({url:'/pages/home/home'})})}
 onLoad(options=>{const stored=uni.getStorageSync(PLAN_LAST_DATE_KEY),requested=options?.date||'';selectedDate.value=/^\d{4}-\d{2}-\d{2}$/.test(requested)?requested:/^\d{4}-\d{2}-\d{2}$/.test(stored||'')?stored:dateKey();uni.setStorageSync(PLAN_LAST_DATE_KEY,selectedDate.value)})
@@ -454,4 +539,6 @@ page{background:#f6f5fa}.page{position:relative;min-height:100vh;overflow:hidden
 @media(min-width:900px){.part-progress-list.single-part{grid-template-columns:minmax(0,1fr)}.part-progress-list.single-part .progress-node{flex:1;min-width:0}.part-progress-list.single-part .progress-nodes{justify-content:space-between}.action-list{grid-template-columns:minmax(0,1fr)}.metric-row{grid-auto-columns:minmax(90px,1fr)}.method-caption{font-size:13px}}
 .method-overlay{position:fixed;z-index:80;inset:0;display:flex;align-items:center;justify-content:center;padding:30rpx;background:rgba(35,38,52,.42);backdrop-filter:blur(8px)}.method-dialog{width:min(650rpx,560px);max-height:82vh;padding:30rpx;box-sizing:border-box;overflow:auto;border-radius:30rpx;background:#fbfbfd;box-shadow:0 30rpx 80rpx rgba(30,33,48,.25)}.method-dialog-head{display:flex;align-items:flex-start;justify-content:space-between}.method-dialog-head>view text{display:block}.method-dialog-head>view text:first-child{font-size:29rpx;font-weight:900}.method-dialog-head>view text:last-child{margin-top:5rpx;color:#9297a5;font-size:17rpx}.method-dialog-head>text{display:grid;place-items:center;width:46rpx;height:46rpx;border-radius:50%;color:#858b9a;background:#edeef2;font-size:29rpx}.method-options{display:grid;grid-template-columns:1fr 1fr;gap:12rpx;margin-top:24rpx}.method-options label{display:flex;align-items:center;gap:10rpx;min-height:58rpx;padding:6rpx 13rpx;border:1rpx solid rgba(var(--glow-rgb),.12);border-radius:17rpx;background:#fff;color:#52596b;font-size:18rpx;font-weight:750}.method-dialog-actions{display:grid;grid-template-columns:1fr 1.2fr;gap:12rpx;margin-top:26rpx}.method-dialog-actions button{height:66rpx;line-height:66rpx;margin:0;border:0;border-radius:20rpx;color:var(--accent);background:var(--pale);font-size:18rpx;font-weight:850}.method-dialog-actions button::after{border:0}.method-dialog-actions .primary{color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent-2))}
 .choice-dialog{display:flex;flex-direction:column;overflow:hidden}.choice-list{max-height:56vh;margin-top:22rpx}.choice-item{display:grid;grid-template-columns:55rpx minmax(0,1fr) 38rpx;align-items:center;gap:14rpx;margin-bottom:11rpx;padding:15rpx;border:1rpx solid rgba(var(--glow-rgb),.12);border-radius:20rpx;background:#fff;color:var(--accent)}.choice-item>view:nth-child(2){min-width:0}.choice-item>view:nth-child(2) text{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.choice-item>view:nth-child(2) text:first-child{color:#41485a;font-size:19rpx;font-weight:800}.choice-item>view:nth-child(2) text:last-child{margin-top:4rpx;color:#969caa;font-size:14rpx;font-weight:500}.choice-item>text{font-size:27rpx;text-align:center}.choice-symbol{width:48rpx;height:48rpx;display:grid;place-items:center;border-radius:15rpx;background:var(--pale);font-size:21rpx}.choice-pressed{opacity:.72;transform:scale(.99)}.choice-search{display:flex;align-items:center;gap:10rpx;margin-top:22rpx;padding:0 17rpx;border:1rpx solid rgba(var(--glow-rgb),.16);border-radius:18rpx;background:#fff;color:var(--accent)}.choice-search input{height:70rpx;min-width:0;flex:1;color:#41485a;font-size:18rpx}.action-choice-list{margin-top:13rpx}.choice-empty{padding:46rpx 15rpx;color:#9298a6;font-size:17rpx;text-align:center}
+.template-dialog{width:min(690rpx,590px)}.template-choice-list{max-height:60vh}.template-choice-item{min-height:76rpx}.content-emerging{animation:surface-panel 680ms cubic-bezier(.18,.82,.24,1) both}.content-floating{animation:surface-drift 4.8s ease-in-out infinite}.content-emerging .content-head{animation:surface-item 620ms 110ms cubic-bezier(.16,.86,.25,1) both}.content-emerging .planner{animation:surface-item 720ms 260ms cubic-bezier(.16,.86,.25,1) both}.content-emerging .complete-button{animation:surface-item 650ms 430ms cubic-bezier(.16,.86,.25,1) both}.content-emerging .complete-button+.complete-button{animation-delay:540ms}@keyframes surface-panel{0%{opacity:0;transform:translateY(92rpx) scale(.97)}55%{opacity:1;transform:translateY(-8rpx) scale(1.006)}78%{transform:translateY(5rpx) scale(1)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes surface-item{0%{opacity:0;transform:translateY(44rpx)}70%{opacity:1;transform:translateY(-5rpx)}100%{opacity:1;transform:translateY(0)}}@keyframes surface-drift{0%,100%{transform:translateY(0)}50%{transform:translateY(-5rpx)}}
+@media (prefers-reduced-motion:reduce){.content-emerging,.content-floating,.content-emerging .content-head,.content-emerging .planner,.content-emerging .complete-button{animation-duration:1ms;animation-delay:0ms;animation-iteration-count:1}}
 </style>
