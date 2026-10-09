@@ -7,7 +7,7 @@
       <view class="soft-grid" />
     </view>
 
-    <view class="shell">
+    <view class="shell" :style="homeShellStyle">
       <view class="topbar" @tap.stop>
         <view class="brand"><view class="brand-mark" /><text>FIT NOTE</text></view>
         <view class="top-actions">
@@ -110,6 +110,20 @@ const homeSummary=ref(null)
 const homeLoading=ref(false)
 const homeError=ref('')
 const avatarImageFailed=ref(false)
+function getHomeShellStyle(){
+  // #ifdef MP-WEIXIN
+  const system=uni.getSystemInfoSync()
+  const statusBarHeight=Number(system?.statusBarHeight)||0
+  const capsule=uni.getMenuButtonBoundingClientRect?.()
+  const capsuleTop=Number(capsule?.top),capsuleBottom=Number(capsule?.bottom)
+  const gap=Number.isFinite(capsuleTop)&&capsuleTop>statusBarHeight?Math.max(8,capsuleTop-statusBarHeight):10
+  const safeTop=Number.isFinite(capsuleBottom)&&capsuleBottom>statusBarHeight
+    ?capsuleBottom+gap:statusBarHeight+54
+  return{paddingTop:`${Math.ceil(safeTop)}px`}
+  // #endif
+  return{}
+}
+const homeShellStyle=ref(getHomeShellStyle())
 let homeRequestId=0
 const actionPartMeta=[{key:'shoulder',name:'肩部',icon:'▽'},{key:'chest',name:'胸部',icon:'◇'},{key:'back',name:'背部',icon:'⌁'},{key:'arms',name:'手臂',icon:'↯'},{key:'abs',name:'腹部',icon:'◎'},{key:'legs',name:'腿部',icon:'△'}]
 const actionCountMap=computed(()=>homeSummary.value?.exerciseLibrary?.partCounts||{})
@@ -203,7 +217,7 @@ async function loadHomeSummary() {
     }
   }
 }
-onShow(()=>{syncTheme();loadHomeSummary()})
+onShow(()=>{homeShellStyle.value=getHomeShellStyle();syncTheme();loadHomeSummary()})
 </script>
 
 <style scoped>
@@ -218,5 +232,8 @@ page{background:#f4f4fa}.page{position:relative;min-height:100vh;overflow:hidden
 .plan-card{display:flex;flex-direction:column;gap:20rpx;}.plan-card .module-head{flex-shrink:0;}.today-plan,.week-completion{flex:1;min-height:0;box-sizing:border-box;}.today-plan,.week-completion{flex:1;min-height:0;box-sizing:border-box;}.today-plan{padding:20rpx;border:1rpx solid rgba(255,255,255,.95);border-radius:24rpx;background:linear-gradient(135deg,var(--pale-2),#fff)}.plan-pressed{transform:scale(.985)}.today-plan .plan-focus{margin:0}.plan-arrow{color:var(--accent);font-size:38rpx}.plan-status{display:flex;justify-content:space-between;margin-top:18rpx;padding-top:15rpx;border-top:1rpx solid rgba(var(--glow-rgb),.12);color:#969caa;font-size:17rpx}.plan-status text:last-child{color:var(--accent);font-weight:650}.week-completion{padding:20rpx;border-radius:24rpx;background:var(--pale-2)}.completion-head{display:flex;align-items:center;justify-content:space-between}.completion-title,.completion-caption{display:block}.completion-title{font-size:21rpx;font-weight:700}.completion-caption{margin-top:4rpx;color:#999fac;font-size:16rpx}.completion-count{color:var(--accent);font-size:25rpx;font-weight:750}.completion-dots{display:flex;justify-content:space-between;margin:23rpx 0 16rpx}.completion-day{display:grid;justify-items:center;gap:9rpx;color:#a0a5b0;font-size:15rpx}.completion-day.today{color:var(--accent);font-weight:700}.completion-dot{width:32rpx;height:32rpx;display:grid;place-items:center;border:3rpx solid rgba(var(--glow-rgb),.26);border-radius:50%;color:#fff;font-size:17rpx;background:transparent;transition:background .45s ease,border-color .45s ease}.completion-dot.done{border-color:var(--accent);background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:0 7rpx 17rpx rgba(var(--glow-rgb),.25)}.completion-day.today .completion-dot:not(.done){border-color:var(--accent)}.history-link{display:flex;justify-content:space-between;padding-top:14rpx;border-top:1rpx solid rgba(var(--glow-rgb),.12);color:var(--accent);font-size:17rpx;font-weight:600}
 @media(min-width:900px){.shell{width:min(1380px,calc(100% - 72px));margin:auto;padding:34px 0 54px}.brand{font-size:13px;gap:9px}.brand-mark{width:25px;height:25px}.top-actions{gap:12px}.theme-switch{padding:8px 10px;gap:6px}.theme-dot{width:8px;height:8px}.theme-dot.active{width:20px}.avatar{width:42px;height:42px;border-width:2px;font-size:14px}.welcome{margin:55px 4px 35px}.eyebrow{font-size:11px;letter-spacing:3px}.headline{margin-top:7px;font-size:34px}.date{margin-top:9px;font-size:12px}.dashboard{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px}.module{min-height:490px;padding:27px;border-radius:28px}.module:hover{transform:translateY(-4px);box-shadow:0 28px 65px rgba(53,61,92,.13)}.module-kicker{font-size:10px;letter-spacing:2px}.module-title{font-size:24px}.icon-button{width:38px;height:38px;border-radius:12px;font-size:22px;line-height:38px}.body-main{gap:20px;margin:34px 0}.score-ring{width:118px;height:118px}.score-inner{width:94px;height:94px}.score{font-size:26px}.unit{font-size:10px}.metrics{gap:10px}.metric{padding:13px}.metric-value{font-size:18px}.metric-value small,.metric-label,.trend{font-size:10px}.card-footer{padding-top:18px;font-size:10px}.trend-panel{margin-top:17px;padding:14px;border-radius:18px}.trend-title{font-size:13px}.trend-caption{font-size:9px}.range-switch{padding:5px 8px;border-radius:10px;font-size:9px}.chart-layout{grid-template-columns:31px 1fr;gap:5px;margin-top:9px}.y-axis{height:112px;font-size:9px}.trend-canvas{height:112px}.x-axis{margin-top:4px;font-size:8px}.chart-empty{inset:0 0 18px;font-size:9px}.chart-empty text:first-child{font-size:20px}.plan-focus{gap:13px;margin:31px 0 21px}.plan-icon{width:52px;height:52px;border-radius:16px;font-size:22px}.plan-name{font-size:17px}.plan-meta{font-size:10px}.percent{font-size:15px}.day-tag{padding:6px 11px;font-size:10px}.progress{height:6px}.steps{margin:25px 0}.step{font-size:10px}.step-dot{width:27px;height:27px;font-size:10px}.primary-button,.secondary-button{height:48px;border-radius:15px;font-size:13px}.library-count{gap:13px;margin:22px 0}.big-number{font-size:42px}.count-label{font-size:14px}.count-note{font-size:10px}.body-parts{gap:9px}.part{gap:11px;padding:11px}.part-icon{width:37px;height:37px;border-radius:11px;font-size:16px}.part-copy text{font-size:13px}.part-copy text:last-child{font-size:10px}.arrow{font-size:21px}.secondary-button{margin-top:18px}}
 .shell{box-sizing:border-box}.topbar{min-width:0}.top-actions{flex-shrink:0}.avatar{box-sizing:border-box;flex-shrink:0;overflow:hidden}.welcome{gap:20rpx;min-width:0}.welcome>view:first-child{flex:1;min-width:0}.streak{box-sizing:border-box;flex-shrink:0;max-width:100%}
+/* #ifdef MP-WEIXIN */
+.welcome{margin-top:28rpx;margin-bottom:28rpx}
+/* #endif */
 @media(max-width:420px){.welcome{align-items:flex-start;gap:14rpx}.streak{padding:14rpx 16rpx}.streak-icon{font-size:27rpx}.streak-value{font-size:25rpx}.streak-label{font-size:16rpx}}
 </style>
