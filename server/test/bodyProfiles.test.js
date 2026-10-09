@@ -159,12 +159,14 @@ test('profile endpoints enforce auth, validation, version, and user isolation', 
 
   await t.test('profile changes display name and permits duplicate nicknames', async () => {
     const updated = await request('PATCH', '/api/v1/users/me', idA, {
-      username: 'NEWName', avatarUrl: 'https://example.com/a.png', timezone: 'UTC'
+      username: 'NEWName', timezone: 'UTC'
     })
     assert.equal(updated.status, 200)
     assert.equal(updated.result.data.username, 'NEWName')
     assert.equal(updated.result.data.displayName, 'NEWName')
     assert.equal(JSON.stringify(updated.result).includes('password_hash'), false)
+    const avatarBypass = await request('PATCH', '/api/v1/users/me', idA, { avatarUrl: 'https://example.com/a.png' })
+    assert.equal(avatarBypass.status, 400)
     const duplicate = await request('PATCH', '/api/v1/users/me', idB, { username: 'newNAME' })
     assert.equal(duplicate.status, 200)
     assert.equal(duplicate.result.data.displayName, 'newNAME')

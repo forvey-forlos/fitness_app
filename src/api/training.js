@@ -46,6 +46,10 @@ export function getTrainingHistory(id) {
   return request({ url: `/api/v1/training-history/${encodeURIComponent(id)}` })
 }
 
+export function getTrainingExportData(recordIds) {
+  return request({ url: '/api/v1/training-history/export-data', method: 'POST', data: { recordIds } })
+}
+
 export function deleteTrainingHistory(id) {
   return request({ url: `/api/v1/training-history/${encodeURIComponent(id)}`, method: 'DELETE' })
 }

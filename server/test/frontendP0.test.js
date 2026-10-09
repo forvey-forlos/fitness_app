@@ -74,3 +74,14 @@ test('profile page uses real user APIs and the shared logout flow', () => {
   assert.match(source, /await logout\(\)/)
   assert.doesNotMatch(source, /uni\.request\(/)
 })
+
+test('profile avatar waits for cropped preview and restores the persisted avatar on failure', () => {
+  const source = readFileSync(path.resolve(__dirname, '../../src/pages/profile/profile.vue'), 'utf8')
+  assert.match(source, /uni\.getImageInfo\(/)
+  assert.match(source, /uni\.canvasToTempFilePath\(/)
+  assert.match(source, /destWidth:512,destHeight:512/)
+  assert.match(source, /pendingAvatarPath\.value=await canvasToAvatarFile\(\)/)
+  assert.match(source, /await uploadAvatar\(path\)/)
+  assert.match(source, /catch\(error\)\{pendingAvatarPath\.value=''/)
+  assert.doesNotMatch(source, /form\.avatarUrl=pendingAvatarPath/)
+})

@@ -14,7 +14,7 @@
           <view class="theme-switch" @tap="switchTheme">
             <view v-for="(_, index) in themes" :key="index" class="theme-dot" :class="{ active: index === themeIndex }" />
           </view>
-          <view class="avatar" @tap="showProfile"><image v-if="homeUser?.avatarUrl" :src="homeUser.avatarUrl" mode="aspectFill" style="width:100%;height:100%;border-radius:50%" /><text v-else>{{ avatarInitial }}</text></view>
+          <view class="avatar" @tap="showProfile"><image v-if="homeUser?.avatarUrl && !avatarImageFailed" :src="homeUser.avatarUrl" mode="aspectFill" style="width:100%;height:100%;border-radius:50%" @error="avatarImageFailed=true" /><text v-else>{{ avatarInitial }}</text></view>
         </view>
       </view>
 
@@ -109,6 +109,7 @@ const transitionKey = ref(0)
 const homeSummary=ref(null)
 const homeLoading=ref(false)
 const homeError=ref('')
+const avatarImageFailed=ref(false)
 let homeRequestId=0
 const actionPartMeta=[{key:'shoulder',name:'肩部',icon:'▽'},{key:'chest',name:'胸部',icon:'◇'},{key:'back',name:'背部',icon:'⌁'},{key:'arms',name:'手臂',icon:'↯'},{key:'abs',name:'腹部',icon:'◎'},{key:'legs',name:'腿部',icon:'△'}]
 const actionCountMap=computed(()=>homeSummary.value?.exerciseLibrary?.partCounts||{})
@@ -121,6 +122,7 @@ const transitionStyle = computed(() => ({ '--next-pale':pendingTheme.value.pale,
 const homeUser=computed(()=>homeSummary.value?.user||null)
 const displayUsername=computed(()=>homeUser.value?.username||'朋友')
 const avatarInitial=computed(()=>Array.from(displayUsername.value)[0]||'F')
+watch(()=>homeUser.value?.avatarUrl,()=>{avatarImageFailed.value=false})
 const userTimezone=computed(()=>homeUser.value?.timezone||'Asia/Shanghai')
 function zonedDateText(options){try{return new Intl.DateTimeFormat('zh-CN',{timeZone:userTimezone.value,...options}).format(new Date())}catch(_){return new Date().toLocaleDateString('zh-CN',options)}}
 const todayText=computed(()=>zonedDateText({month:'long',day:'numeric',weekday:'long'}))

@@ -204,6 +204,17 @@ test('completion, immutable snapshots, idempotency, isolation, history and timez
     assert.equal(list.body.data.items[0].id, recordId)
     assert.equal((await request('GET', '/training-history', userB)).body.data.total, 0)
   })
+  await t.test('bulk export data validates selection and preserves ownership', async () => {
+    assert.equal((await request('POST', '/training-history/export-data', null, { recordIds: [recordId] })).status, 401)
+    assert.equal((await request('POST', '/training-history/export-data', userA, { recordIds: [] })).status, 400)
+    assert.equal((await request('POST', '/training-history/export-data', userA, { recordIds: [recordId, recordId] })).status, 400)
+    assert.equal((await request('POST', '/training-history/export-data', userB, { recordIds: [recordId] })).status, 404)
+    const exported = await request('POST', '/training-history/export-data', userA, { recordIds: [recordId] })
+    assert.equal(exported.status, 200)
+    assert.equal(exported.body.data.records.length, 1)
+    assert.equal(exported.body.data.records[0].planNameSnapshot, '胸部训练')
+    assert.equal(exported.body.data.records[0].exercises[0].exerciseNameSnapshot, '杠铃卧推')
+  })
   await t.test('week highlights the plan date and counts a day once', async () => {
     const secondId = randomUUID()
     records.set(secondId, {

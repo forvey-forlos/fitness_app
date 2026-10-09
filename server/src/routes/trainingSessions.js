@@ -1,13 +1,14 @@
 const { Router } = require('express')
 const { createAuthMiddleware } = require('../middlewares/auth')
 const createController = require('../controllers/trainingSessions')
-const { validateId, validateComplete, validateList, validateWeek } = require('../validators/trainingSessions')
+const { validateId, validateExport, validateComplete, validateList, validateWeek } = require('../validators/trainingSessions')
 
 function createTrainingSessionsRoutes(service, authenticate = createAuthMiddleware()) {
   const router = Router()
   const controller = createController(service)
   router.post('/training-plans/:id/complete', authenticate, validateId, validateComplete, controller.complete)
   router.get('/training-history', authenticate, validateList, controller.list)
+  router.post('/training-history/export-data', authenticate, validateExport, controller.exportData)
   router.get('/training-history/:id', authenticate, validateId, controller.get)
   router.delete('/training-history/:id', authenticate, validateId, controller.remove)
   router.get('/training-stats/week', authenticate, validateWeek, controller.weekly)

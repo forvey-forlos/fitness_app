@@ -222,6 +222,14 @@ function createTrainingSessionsService(options = {}) {
       await activeUser(userId)
       return detail(userId, id)
     },
+    async exportData(userId, recordIds) {
+      await activeUser(userId)
+      const records = []
+      for (let index = 0; index < recordIds.length; index += 20) {
+        records.push(...await Promise.all(recordIds.slice(index, index + 20).map((id) => detail(userId, id))))
+      }
+      return { records }
+    },
     async remove(userId, id) {
       await activeUser(userId)
       if (!await repository.softDelete(userId, id)) throw new HttpError(404, 'NOT_FOUND', '训练历史不存在')

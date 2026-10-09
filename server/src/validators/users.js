@@ -3,7 +3,7 @@ const { isValidDisplayName, isValidTimezone } = require('./auth')
 
 function validateUpdateMe(req, res, next) {
   const body = req.body
-  const allowed = ['displayName', 'username', 'avatarUrl', 'timezone']
+  const allowed = ['displayName', 'username', 'timezone']
   const errors = []
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     errors.push({ field: 'body', message: '请求体必须是对象' })
@@ -20,18 +20,6 @@ function validateUpdateMe(req, res, next) {
     }
     if (Object.hasOwn(body, 'timezone') && !isValidTimezone(body.timezone)) {
       errors.push({ field: 'timezone', message: '时区不合法' })
-    }
-    if (Object.hasOwn(body, 'avatarUrl') && body.avatarUrl !== null) {
-      let valid = typeof body.avatarUrl === 'string' && body.avatarUrl.length <= 2048
-      if (valid) {
-        try {
-          const url = new URL(body.avatarUrl)
-          valid = ['https:', 'http:'].includes(url.protocol) && Boolean(url.hostname)
-        } catch {
-          valid = false
-        }
-      }
-      if (!valid) errors.push({ field: 'avatarUrl', message: '头像地址必须是长度不超过 2048 的 HTTP(S) URL 或 null' })
     }
   }
   if (errors.length) return next(new HttpError(400, 'VALIDATION_ERROR', '请求参数不合法', errors))

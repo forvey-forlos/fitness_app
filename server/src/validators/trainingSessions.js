@@ -14,6 +14,29 @@ function validateId(req, res, next) {
   if (!uuid.test(req.params.id || '')) return next(fail([{ field: 'id', message: 'ID 不合法' }]))
   next()
 }
+function validateExport(req, res, next) {
+  const body = req.body
+  const errors = []
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return next(fail([{ field: 'body', message: '请求体必须是对象' }]))
+  }
+  for (const key of Object.keys(body)) {
+    if (key !== 'recordIds') errors.push({ field: key, message: '不支持的字段' })
+  }
+  if (!Array.isArray(body.recordIds) || !body.recordIds.length || body.recordIds.length > 500) {
+    errors.push({ field: 'recordIds', message: '须选择 1–500 条训练历史' })
+  } else {
+    const seen = new Set()
+    body.recordIds.forEach((id, index) => {
+      if (!uuid.test(id || '')) errors.push({ field: `recordIds[${index}]`, message: 'ID 不合法' })
+      else if (seen.has(id)) errors.push({ field: `recordIds[${index}]`, message: 'ID 不能重复' })
+      else seen.add(id)
+    })
+  }
+  if (errors.length) return next(fail(errors))
+  req.validated = { recordIds: [...body.recordIds] }
+  next()
+}
 function validateComplete(req, res, next) {
   const body = req.body
   const errors = []
@@ -139,4 +162,4 @@ function validateWeek(req, res, next) {
   req.validated = { weekStart, timezone }
   next()
 }
-module.exports = { validateId, validateComplete, validateList, validateWeek }
+module.exports = { validateId, validateExport, validateComplete, validateList, validateWeek }

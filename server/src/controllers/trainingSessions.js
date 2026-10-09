@@ -11,6 +11,9 @@ function createTrainingSessionsController(service) {
     async list(req, res) {
       sendSuccess(res, await sessions().list(req.userId, req.validated))
     },
+    async exportData(req, res) {
+      sendSuccess(res, await sessions().exportData(req.userId, req.validated.recordIds))
+    },
     async get(req, res) {
       sendSuccess(res, await sessions().get(req.userId, req.params.id))
     },

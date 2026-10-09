@@ -347,9 +347,17 @@ X-Timezone: Asia/Shanghai
 }
 ```
 
-`PATCH /users/me` 可修改 `displayName`、头像和时区；`accountCode` 不允许修改。响应中的 `username` 暂作为 `displayName` 的兼容别名。
+`PATCH /users/me` 只可修改 `displayName` 和时区；`accountCode` 与 `avatarUrl` 不允许直接修改。响应中的 `username` 暂作为 `displayName` 的兼容别名。
 
-### 6.2 微信身份绑定
+### 6.2 用户头像
+
+- `POST /users/me/avatar`：需要 Access Token，以 `multipart/form-data` 上传字段 `avatar`。支持 JPG、PNG、WebP，最大 2 MiB；服务端校验声明 MIME、文件结构、像素尺寸（最长边 4096、总像素不超过 12 MiP），不支持动态 WebP。成功返回 `avatarUrl`、`width`、`height`、`byteSize`。
+- `DELETE /users/me/avatar`：删除当前用户头像并将 `users.avatar_url` 置空。
+- `GET /avatars/:userId?v=<version>`：读取公开头像资源。响应包含 1 天缓存、ETag、强制重新验证与 `X-Content-Type-Options: nosniff`；每次上传会生成新版本 URL。头像按公开资料图片处理，不应上传敏感证件或隐私图片。
+
+上传接口按登录用户限制为 10 分钟最多 12 次。头像二进制与 `users.avatar_url` 在同一数据库事务内写入；失败会整体回滚，不会出现地址已更新但图片未保存的状态。普通资料接口不能绕过该流程写入任意头像地址。
+
+### 6.3 微信身份绑定
 
 - `GET /users/me/identities/wechat`：查询当前小程序 AppID 下的绑定状态。
 - `POST /users/me/identities/wechat`：请求体 `{ "code": "wx.login code" }`，将当前微信 OpenID 绑定到已登录用户。
@@ -357,7 +365,7 @@ X-Timezone: Asia/Shanghai
 
 `POST /auth/wechat` 使用一次性 `wx.login` code 登录；OpenID 只保存在服务端，不返回前端。微信新用户仍获得 UUID 和唯一 `accountCode`，其默认昵称可与其他用户重复。
 
-### 6.3 主题偏好
+### 6.4 主题偏好
 
 `GET /users/me/preferences`、`PATCH /users/me/preferences`
 
@@ -895,6 +903,18 @@ Idempotency-Key: finish-usr_01K-2026-09-15
 个人显示名称时，既有历史不能跟随变化；未来导出可以同时使用快照展示和
 `exerciseId` 关联标准动作、肌群数据。
 
+### 10.4 批量读取导出数据
+
+`POST /api/v1/training-history/export-data`
+
+请求体为 `{ "recordIds": ["训练历史 UUID"] }`，一次允许选择 1–500 条且
+ID 不可重复。接口只返回当前登录用户拥有且未删除的训练历史，任何记录不存在
+或不属于当前用户时返回 `404 NOT_FOUND`，不允许静默导出部分数据。
+
+响应 `data.records` 中每一项与历史详情结构一致，包含计划名称快照、日期、时长、
+动作名称和变式快照、计划指标及实际分组数据。接口仅聚合结构化数据；Markdown、
+纯文本等文件排版与各平台保存由客户端完成。
+
 ## 11. 周完成统计
 
 `GET /training-stats/weekly?weekStart=2026-09-14&timezone=Asia/Shanghai`
@@ -1078,6 +1098,16 @@ GET /body/profile
 - `timezone`
 - `status`
 - `created_at`、`updated_at`、`deleted_at`
+
+`user_avatars`
+
+- `user_id` PK/FK
+- `mime_type`
+- `image_data`（MEDIUMBLOB）
+- `byte_size`（1–2 MiB）
+- `updated_at`
+
+当前采用数据库二进制存储，以获得与 `users.avatar_url` 的原子事务和统一备份。未来迁移 OSS 时，服务层通过 `avatarStorage` 边界切换实现；应采用“先上传新对象、提交数据库新 URL、提交成功后再异步删除旧对象”的顺序，避免数据库失败造成头像丢失。
 
 `refresh_tokens`
 
@@ -1286,7 +1316,7 @@ GET /body/profile
 1. 智能体脂秤接入和数据导入。
 2. 训练模板、周期计划和提醒。
 3. 数据导出、账号注销。
-4. 图片头像与对象存储。
+4. 将现有数据库头像存储实现迁移到 OSS/CDN，并增加生命周期清理任务。
 5. 训练统计、排行榜或社交能力。
 
 ## 19. 联调验收清单
