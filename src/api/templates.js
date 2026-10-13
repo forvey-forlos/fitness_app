@@ -1,0 +1,15 @@
+import { request, withQuery } from './request'
+
+const idPath=id=>encodeURIComponent(id)
+export const listMyTemplates=()=>request({url:'/api/v1/training-templates'})
+export const getMyTemplate=id=>request({url:`/api/v1/training-templates/${idPath(id)}`})
+export const createMyTemplate=data=>request({url:'/api/v1/training-templates',method:'POST',data})
+export const updateMyTemplate=(id,data)=>request({url:`/api/v1/training-templates/${idPath(id)}`,method:'PUT',data})
+export const deleteMyTemplate=id=>request({url:`/api/v1/training-templates/${idPath(id)}`,method:'DELETE'})
+export const createPlanFromTemplate=(id,planDate,idempotencyKey)=>request({url:`/api/v1/training-templates/${idPath(id)}/create-plan`,method:'POST',data:{planDate},idempotencyKey})
+export const publishMyTemplate=(id,data)=>request({url:`/api/v1/training-templates/${idPath(id)}/publish`,method:'POST',data})
+export const listCommunityTemplates=query=>request({url:withQuery('/api/v1/template-community',query)})
+export const getCommunityTemplate=id=>request({url:`/api/v1/template-community/${idPath(id)}`})
+export const deleteCommunityTemplate=id=>request({url:`/api/v1/template-community/${idPath(id)}`,method:'DELETE'})
+export const setCommunityReaction=(id,kind,enabled)=>request({url:`/api/v1/template-community/${idPath(id)}/${kind}`,method:'PUT',data:{enabled}})
+export const importCommunityTemplate=id=>request({url:`/api/v1/template-community/${idPath(id)}/import`,method:'POST'})

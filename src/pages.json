@@ -57,6 +57,20 @@
 			}
 	},
 		{
+			"path": "pages/my-templates/my-templates",
+			"style": {
+				"navigationStyle": "custom",
+				"navigationBarTitleText": "我的模板"
+			}
+	},
+		{
+			"path": "pages/template-community/template-community",
+			"style": {
+				"navigationStyle": "custom",
+				"navigationBarTitleText": "模板广场"
+			}
+	},
+		{
 			"path": "pages/index/index",
 			"style": {
 				"navigationBarTitleText": "uni-app"
