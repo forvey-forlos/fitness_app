@@ -28,22 +28,15 @@
         <view v-else class="hero-empty"><view>＋</view><text>点击“新建计划”开始安排训练</text></view>
       </view>
 
-      <view class="template-manager">
-        <view class="content-head"><view><text class="section-title">模板管理</text><text class="section-caption">保存常用方案，发现新的训练灵感</text></view></view>
-        <view class="template-manager-links">
-          <view @tap="goMyTemplates"><text>我的模板</text><text>查看、编辑、发布自己的训练方案　›</text></view>
-          <view @tap="goCommunity"><text>浏览模板</text><text>在模板广场收藏或导入方案　›</text></view>
-        </view>
-      </view>
-
       <view v-if="contentVisible" :key="contentRevealKey" class="content" :class="{'content-emerging':contentEmerging,'content-floating':contentFloating}">
         <view class="content-head"><view><text class="section-title">训练内容</text><text class="section-caption">选择部位并录入预期与实际数据</text></view><text class="saved-tip">{{ syncText }}</text></view>
         <view class="planner">
           <view class="part-column">
-            <text class="column-label">训练部位</text>
+            <text class="column-label">训练部位 · 拖动排序</text>
             <view class="part-list">
-              <view v-for="part in planParts" :key="part.key" class="part-tab" :class="{active:selectedPartKey===part.key}" hover-class="tab-pressed" @tap="selectedPartKey=part.key">
+              <view v-for="(part,partIndex) in planParts" :key="part.key" class="part-tab" :class="{active:selectedPartKey===part.key,dragging:partDragIndex===partIndex}" hover-class="tab-pressed" @tap="selectedPartKey=part.key">
                 <view class="part-symbol">{{ part.icon }}</view><view class="part-tab-copy"><text>{{ part.name }}</text><text>{{ part.actions.length }} 项</text></view><text class="part-remove" @tap.stop="removePart(part)">×</text>
+                <view v-if="!todayCompleted" class="part-drag-handle" @touchstart.stop.prevent="startPartTouchDrag($event,partIndex)" @touchmove.stop.prevent="movePartTouchDrag" @touchend.stop.prevent="finishPartDrag" @touchcancel.stop.prevent="finishPartDrag" @mousedown.stop.prevent="startPartMouseDrag($event,partIndex)">⠿</view>
               </view>
             </view>
             <button class="add-part" hover-class="pressed" @tap="addPart"><text>＋</text><text>添加部位</text></button>
@@ -83,10 +76,17 @@
         <button v-if="!currentPlan" class="complete-button template-save-button" :disabled="savingTemplate||loading" @tap="openSaveTemplate">保存训练模板</button>
         <button v-if="currentPlan&&!todayCompleted" class="complete-button update" :disabled="completing" hover-class="pressed" @tap="completeTraining">{{ completing?'正在完成训练…':'完成该日训练' }}</button>
       </view>
+      <view class="template-manager">
+        <view class="content-head"><view><text class="section-title">模板管理</text><text class="section-caption">保存常用方案，发现新的训练灵感</text></view></view>
+        <view class="template-manager-links">
+          <view @tap="goMyTemplates"><text>我的模板</text><text>查看、编辑、发布自己的训练方案　›</text></view>
+          <view @tap="goCommunity"><text>浏览模板</text><text>在模板广场收藏或导入方案　›</text></view>
+        </view>
+      </view>
     </view>
     <view v-if="templateChooserVisible" class="method-overlay" @tap="closeTemplateChooser">
       <view class="method-dialog choice-dialog template-dialog" @tap.stop>
-        <view class="method-dialog-head"><text class="dialog-back" @tap="closeTemplateChooser">‹</text><view><text>创建训练计划</text><text>选择空白计划或自己的模板</text></view></view>
+        <view class="method-dialog-head"><text class="dialog-back" @tap="closeTemplateChooser">‹</text><view><text class="dialog-kicker">CREATE PLAN</text><text>创建训练计划</text><text>选择空白计划或自己的模板</text></view></view>
         <scroll-view scroll-y class="choice-list template-choice-list">
           <view class="choice-item template-choice-item" hover-class="choice-pressed" @tap="startBlankPlan">
             <view class="choice-symbol">＋</view><view><text>新建计划</text><text>从空白训练内容开始</text></view><text>›</text>
@@ -99,7 +99,7 @@
     </view>
     <view v-if="templatePickerVisible" class="method-overlay" @tap="closeTemplatePicker">
       <view class="method-dialog choice-dialog" @tap.stop>
-        <view class="method-dialog-head"><text class="dialog-back" @tap="backToPlanChooser">‹</text><view><text>选择模板</text><text>点击名称选择，长按或点 ⓘ 预览</text></view></view>
+        <view class="method-dialog-head"><text class="dialog-back" @tap="backToPlanChooser">‹</text><view><text class="dialog-kicker">SELECT TEMPLATE</text><text>选择模板</text><text>点击名称选择，长按或点 ⓘ 预览</text></view></view>
         <scroll-view scroll-y class="choice-list">
           <view v-for="item in myTemplates" :key="item.id" class="template-picker-row" :class="{active:selectedTemplateId===item.id}" @tap="selectedTemplateId=item.id" @longpress="previewTemplate(item)">
             <text>{{ item.name }}</text><text class="template-info" @tap.stop="previewTemplate(item)">ⓘ</text>
@@ -111,7 +111,7 @@
     </view>
     <view v-if="templatePreview" class="method-overlay" @tap="templatePreview=null">
       <view class="method-dialog" @tap.stop>
-        <view class="method-dialog-head"><text class="dialog-back" @tap="templatePreview=null">‹</text><view><text>{{ templatePreview.name }}</text><text>{{ templatePreview.exercises?.length||0 }} 个动作</text></view></view>
+        <view class="method-dialog-head"><text class="dialog-back" @tap="templatePreview=null">‹</text><view><text class="dialog-kicker">TEMPLATE PREVIEW</text><text>{{ templatePreview.name }}</text><text>{{ templatePreview.exercises?.length||0 }} 个动作</text></view></view>
         <scroll-view scroll-y class="template-preview-list">
           <view v-for="(item,index) in (templatePreview.exercises||[])" :key="index" class="template-preview-item"><text>{{ index+1 }}. {{ item.exerciseName }}</text><text>{{ item.plannedSets }} 组 · {{ item.recordMethods?.map(recordMethodLabel).join('、') }}</text></view>
         </scroll-view>
@@ -119,14 +119,14 @@
     </view>
     <view v-if="saveTemplateVisible" class="method-overlay" @tap="saveTemplateVisible=false">
       <view class="method-dialog" @tap.stop>
-        <view class="method-dialog-head"><text class="dialog-back" @tap="saveTemplateVisible=false">‹</text><view><text>保存训练模板</text><text>保存当前动作和预计训练数据</text></view></view>
+        <view class="method-dialog-head"><text class="dialog-back" @tap="saveTemplateVisible=false">‹</text><view><text class="dialog-kicker">SAVE TEMPLATE</text><text>保存训练模板</text><text>保存当前动作和预计训练数据</text></view></view>
         <input v-model="templateNameDraft" class="template-name-input" maxlength="80" placeholder="模板名称"/>
         <button class="picker-confirm" :disabled="savingTemplate" @tap="saveCurrentAsTemplate">{{ savingTemplate?'正在保存…':'保存模板' }}</button>
       </view>
     </view>
     <view v-if="partChooserVisible" class="method-overlay">
       <view class="method-dialog choice-dialog" @tap.stop>
-        <view class="method-dialog-head"><text class="dialog-back" @tap="closePartChooser">‹</text><view><text>添加训练部位</text><text>选择今天要训练的部位</text></view></view>
+        <view class="method-dialog-head"><text class="dialog-back" @tap="closePartChooser">‹</text><view><text class="dialog-kicker">ADD BODY PART</text><text>添加训练部位</text><text>选择今天要训练的部位</text></view></view>
         <scroll-view scroll-y class="choice-list">
           <view v-for="part in availablePartChoices" :key="part.key" class="choice-item" hover-class="choice-pressed" @tap="choosePart(part)">
             <view class="choice-symbol">{{ part.icon }}</view><view><text>{{ part.name }}</text><text>添加到今日训练</text></view><text>＋</text>
@@ -136,7 +136,7 @@
     </view>
     <view v-if="actionChooserVisible" class="method-overlay">
       <view class="method-dialog choice-dialog" @tap.stop>
-        <view class="method-dialog-head"><text class="dialog-back" @tap="closeActionChooser">‹</text><view><text>添加具体动作</text><text>{{ activePart?.name || '' }} · 来自动作管理库</text></view></view>
+        <view class="method-dialog-head"><text class="dialog-back" @tap="closeActionChooser">‹</text><view><text class="dialog-kicker">ADD MOVEMENT</text><text>添加具体动作</text><text>{{ activePart?.name || '' }} · 来自动作管理库</text></view></view>
         <view class="choice-search"><text>⌕</text><input v-model="actionChooserKeyword" maxlength="30" placeholder="搜索动作名称" confirm-type="search"/></view>
         <scroll-view scroll-y class="choice-list action-choice-list">
           <view v-for="action in availableActionChoices" :key="action.id" class="choice-item" hover-class="choice-pressed" @tap="chooseAction(action)">
@@ -148,7 +148,7 @@
     </view>
     <view v-if="methodEditorAction" class="method-overlay">
       <view class="method-dialog" @tap.stop>
-        <view class="method-dialog-head"><text class="dialog-back" @tap="closeMethodEditor">‹</text><view><text>记录方式</text><text>{{ methodEditorAction.name }}</text></view></view>
+        <view class="method-dialog-head"><text class="dialog-back" @tap="closeMethodEditor">‹</text><view><text class="dialog-kicker">RECORD METHOD</text><text>记录方式</text><text>{{ methodEditorAction.name }}</text></view></view>
         <checkbox-group class="method-options" @change="changeMethodDraft">
           <label v-for="option in recordMethodOptions" :key="option.key">
             <checkbox :value="option.key" :checked="methodDraft.includes(option.key)" color="#7775bd"/>
@@ -168,6 +168,7 @@
 import { computed,ref,watch } from 'vue'
 import { onHide,onLoad,onShow,onUnload } from '@dcloudio/uni-app'
 import { getExercises } from '../../api/exercises'
+import { pageSafeTop } from '../../utils/page-safe-area'
 import { createMyTemplate,getMyTemplate,listMyTemplates,createPlanFromTemplate } from '../../api/templates'
 import { USER_KEY } from '../../api/auth'
 import { bodyPartOptions,recordMethodOptions,recordMethodLabel } from '../../constants/exercise-meta'
@@ -195,7 +196,7 @@ const editorRevealed=ref(false),contentEmerging=ref(false),contentFloating=ref(f
 const completionAttempt=ref(null)
 const workoutStartedAt=ref('')
 const savedDraftSignature=ref('')
-const dragIndex=ref(-1)
+const dragIndex=ref(-1),partDragIndex=ref(-1)
 const methodEditorAction=ref(null),methodDraft=ref([])
 const partChooserVisible=ref(false),actionChooserVisible=ref(false),actionChooserKeyword=ref('')
 function getShellStyle(){
@@ -208,8 +209,9 @@ function getShellStyle(){
   return{}
 }
 const shellStyle=ref(getShellStyle())
-let dragStartY=0,mouseCleanup=null,draftSaveTimer=null,draftHydrating=false
-const themeStyle=computed(()=>{const t=themes[themeIndex.value];return{'--accent':t.accent,'--accent-2':t.accent2,'--pale':t.pale,'--pale-2':t.pale2,'--glow-rgb':t.glow}})
+let dragStartY=0,mouseCleanup=null,partDragStartY=0,partMouseCleanup=null,draftSaveTimer=null,draftHydrating=false
+const overlaySafeTop=pageSafeTop()
+const themeStyle=computed(()=>{const t=themes[themeIndex.value];return{'--accent':t.accent,'--accent-2':t.accent2,'--pale':t.pale,'--pale-2':t.pale2,'--glow-rgb':t.glow,'--page-safe-top':`${overlaySafeTop}px`}})
 const todayText=computed(()=>new Date(selectedDate.value+'T00:00:00').toLocaleDateString('zh-CN',{month:'long',day:'numeric',weekday:'long'}))
 const activePart=computed(()=>planParts.value.find(part=>part.key===selectedPartKey.value)||null)
 const availablePartChoices=computed(()=>availableParts())
@@ -309,7 +311,7 @@ function applyPlan(plan){
     if(!byCategory.has(key))byCategory.set(key,[])
     byCategory.get(key).push(action)
   }
-  planParts.value=parts.filter(part=>byCategory.has(part.key)).map(part=>({...part,actions:byCategory.get(part.key)}))
+  planParts.value=[...byCategory.keys()].map(key=>({...parts.find(part=>part.key===key),actions:byCategory.get(key)}))
   selectedPartKey.value=planParts.value[0]?.key||''
   savedDraftSignature.value=draftSignature()
 }
@@ -347,6 +349,12 @@ function addPart(){if(!ensureEditable())return;if(!availablePartChoices.value.le
 function closePartChooser(){partChooserVisible.value=false}
 function choosePart(part){if(!part||planParts.value.some(item=>item.key===part.key))return;planParts.value.push({...part,actions:[]});selectedPartKey.value=part.key;closePartChooser()}
 function removePart(part){if(!ensureEditable())return;uni.showModal({title:`移除${part.name}？`,content:'该部位今天填写的数据会一并移除。',success:result=>{if(!result.confirm)return;planParts.value=planParts.value.filter(item=>item.key!==part.key);selectedPartKey.value=planParts.value[0]?.key||''}})}
+function reorderPart(from,to){if(from===to||to<0||to>=planParts.value.length)return;const ordered=[...planParts.value],[item]=ordered.splice(from,1);ordered.splice(to,0,item);planParts.value=ordered;partDragIndex.value=to}
+function movePartDrag(y){if(partDragIndex.value<0)return;const delta=y-partDragStartY;if(Math.abs(delta)<55)return;const next=partDragIndex.value+(delta>0?1:-1);if(next>=0&&next<planParts.value.length){reorderPart(partDragIndex.value,next);partDragStartY=y}}
+function startPartTouchDrag(event,index){if(todayCompleted.value)return;partDragIndex.value=index;partDragStartY=event.touches?.[0]?.clientY||0}
+function movePartTouchDrag(event){movePartDrag(event.touches?.[0]?.clientY||partDragStartY)}
+function startPartMouseDrag(event,index){if(todayCompleted.value||typeof window==='undefined')return;partDragIndex.value=index;partDragStartY=event.clientY;const move=mouseEvent=>movePartDrag(mouseEvent.clientY);const end=()=>{window.removeEventListener('mousemove',move);window.removeEventListener('mouseup',end);partMouseCleanup=null;finishPartDrag()};partMouseCleanup=end;window.addEventListener('mousemove',move);window.addEventListener('mouseup',end)}
+function finishPartDrag(){if(partMouseCleanup&&typeof window!=='undefined')partMouseCleanup();partDragIndex.value=-1}
 function addAction(){if(!ensureEditable()||!activePart.value)return;actionChooserKeyword.value='';if(!availableActionChoices.value.length){uni.showToast({title:'该部位暂无更多动作，请先在动作管理添加',icon:'none'});return}actionChooserVisible.value=true}
 function closeActionChooser(){actionChooserVisible.value=false;actionChooserKeyword.value=''}
 function chooseAction(action){if(!action||!activePart.value)return;activePart.value.actions.push(catalogAction(action,activePart.value.key));closeActionChooser()}
@@ -577,4 +585,7 @@ page{background:#f6f5fa}.page{position:relative;min-height:100vh;overflow:hidden
 .choice-dialog{display:flex;flex-direction:column;overflow:hidden}.choice-list{max-height:56vh;margin-top:22rpx}.choice-item{display:grid;grid-template-columns:55rpx minmax(0,1fr) 38rpx;align-items:center;gap:14rpx;margin-bottom:11rpx;padding:15rpx;border:1rpx solid rgba(var(--glow-rgb),.12);border-radius:20rpx;background:#fff;color:var(--accent)}.choice-item>view:nth-child(2){min-width:0}.choice-item>view:nth-child(2) text{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.choice-item>view:nth-child(2) text:first-child{color:#41485a;font-size:19rpx;font-weight:800}.choice-item>view:nth-child(2) text:last-child{margin-top:4rpx;color:#969caa;font-size:14rpx;font-weight:500}.choice-item>text{font-size:27rpx;text-align:center}.choice-symbol{width:48rpx;height:48rpx;display:grid;place-items:center;border-radius:15rpx;background:var(--pale);font-size:21rpx}.choice-pressed{opacity:.72;transform:scale(.99)}.choice-search{display:flex;align-items:center;gap:10rpx;margin-top:22rpx;padding:0 17rpx;border:1rpx solid rgba(var(--glow-rgb),.16);border-radius:18rpx;background:#fff;color:var(--accent)}.choice-search input{height:70rpx;min-width:0;flex:1;color:#41485a;font-size:18rpx}.action-choice-list{margin-top:13rpx}.choice-empty{padding:46rpx 15rpx;color:#9298a6;font-size:17rpx;text-align:center}
 .template-dialog{width:min(690rpx,590px)}.template-choice-list{max-height:60vh}.template-choice-item{min-height:76rpx}.content-emerging{animation:surface-panel 680ms cubic-bezier(.18,.82,.24,1) both}.content-floating{animation:surface-drift 4.8s ease-in-out infinite}.content-emerging .content-head{animation:surface-item 620ms 110ms cubic-bezier(.16,.86,.25,1) both}.content-emerging .planner{animation:surface-item 720ms 260ms cubic-bezier(.16,.86,.25,1) both}.content-emerging .complete-button{animation:surface-item 650ms 430ms cubic-bezier(.16,.86,.25,1) both}.content-emerging .complete-button+.complete-button{animation-delay:540ms}@keyframes surface-panel{0%{opacity:0;transform:translateY(92rpx) scale(.97)}55%{opacity:1;transform:translateY(-8rpx) scale(1.006)}78%{transform:translateY(5rpx) scale(1)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes surface-item{0%{opacity:0;transform:translateY(44rpx)}70%{opacity:1;transform:translateY(-5rpx)}100%{opacity:1;transform:translateY(0)}}@keyframes surface-drift{0%,100%{transform:translateY(0)}50%{transform:translateY(-5rpx)}}
 @media (prefers-reduced-motion:reduce){.content-emerging,.content-floating,.content-emerging .content-head,.content-emerging .planner,.content-emerging .complete-button{animation-duration:1ms;animation-delay:0ms;animation-iteration-count:1}}
+.part-tab.dragging{z-index:3;transform:scale(1.035);box-shadow:0 14rpx 30rpx rgba(var(--glow-rgb),.2)}.part-drag-handle{display:grid;place-items:center;width:100%;height:29rpx;margin-top:5rpx;border-radius:9rpx;color:var(--accent);background:var(--pale);font-size:22rpx;cursor:grab;user-select:none}.part-remove{z-index:2}
+.method-dialog-head>view .dialog-kicker{margin:0 0 4rpx;color:var(--accent);font-size:13rpx;font-weight:750;letter-spacing:2rpx}.method-dialog-head>view text:nth-child(2){font-size:29rpx;font-weight:900}.method-dialog-head>view text:nth-child(3){margin-top:5rpx;color:#9297a5;font-size:17rpx;font-weight:400}
+.method-overlay{box-sizing:border-box;padding-top:calc(var(--page-safe-top) + 20rpx)}.method-dialog{max-height:calc(100vh - var(--page-safe-top) - 50rpx)}
 </style>

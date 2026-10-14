@@ -92,3 +92,24 @@ test('training history exposes themed selection, preview and multi-platform expo
   assert.match(exporter, /#ifdef APP-PLUS/)
   assert.match(exporter, /shareFileMessage/)
 })
+
+test('page navigation and drag ordering keep the new layout consistent', () => {
+  const root = path.resolve(__dirname, '../..')
+  const read = name => readFileSync(path.join(root, `src/pages/${name}/${name}.vue`), 'utf8')
+  const plan = read('training-plan')
+  const templates = read('my-templates')
+  const body = read('body-data')
+  const history = read('training-history')
+  const actions = read('action-management')
+  assert.ok(plan.indexOf('class="content"') < plan.indexOf('class="template-manager"'))
+  assert.match(plan, /startPartTouchDrag/)
+  assert.match(plan, /planParts\.value=\[\.\.\.byCategory\.keys\(\)\]/)
+  assert.match(templates, /startEditorTouchDrag/)
+  assert.match(templates, /长按模板选中并进行发布/)
+  assert.doesNotMatch(templates, /:disabled="!selectedId"/)
+  for (const source of [body, history, actions]) {
+    assert.match(source, /pageSafeStyles/)
+    assert.match(source, /safeStyles\.shell/)
+    assert.match(source, /safeStyles\.overlay/)
+  }
+})

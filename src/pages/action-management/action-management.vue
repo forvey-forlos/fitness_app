@@ -1,15 +1,15 @@
 <template>
   <view class="page" :style="themeStyle">
     <view class="ambient" aria-hidden="true"><view class="orb orb-one"/><view class="orb orb-two"/><view class="dot-field"/></view>
-    <view class="shell">
+    <view class="shell" :style="safeStyles.shell">
       <view class="topbar">
-        <view class="back" hover-class="pressed" @tap="goBack"><text>‹</text><text>返回首页</text></view>
-        <view class="brand"><view class="brand-mark"/><text>FIT NOTE</text></view>
+        <button class="nav-back" hover-class="pressed" @tap="goBack">‹</button>
+        <view class="nav-title"><text>MOVEMENT LIBRARY</text><text>动作管理</text></view>
         <view class="sync-badge"><view class="sync-dot"/><text>{{ syncText }}</text></view>
       </view>
 
       <view class="title-row">
-        <view><text class="eyebrow">MOVEMENT LIBRARY</text><text class="title">动作管理</text></view>
+        <view><text class="eyebrow">YOUR LIBRARY</text><text class="title">我的动作库</text></view>
         <button class="title-add" hover-class="add-pressed" @tap="openAddMenu">＋</button>
       </view>
 
@@ -41,9 +41,9 @@
       <view class="footer-tip" @tap="loadExercises"><text>{{ loadError ? '!' : '✓' }}</text><text>{{ loadError || '动作目录与当前账号同步' }}</text></view>
     </view>
 
-    <view v-if="libraryVisible" class="overlay">
+    <view v-if="libraryVisible" class="overlay" :style="safeStyles.overlay">
       <view class="bottom-sheet" @tap.stop>
-        <view class="grabber"/><view class="sheet-head"><view><text class="sheet-kicker">ACTION CATALOG</text><text class="sheet-title">从动作目录选取</text></view><text class="close" @tap="libraryVisible=false">×</text></view>
+        <view class="grabber"/><view class="sheet-head"><button class="nav-back" @tap="libraryVisible=false">‹</button><view><text class="sheet-kicker">ACTION CATALOG</text><text class="sheet-title">从动作目录选取</text></view></view>
         <view class="sheet-search"><text>⌕</text><input v-model="catalogKeyword" placeholder="搜索数据库动作"/></view>
         <scroll-view class="catalog-scroll" scroll-y>
           <view v-if="!catalogResults.length" class="sheet-empty">没有找到可选动作</view>
@@ -57,10 +57,10 @@
       </view>
     </view>
 
-    <view v-if="editorVisible" class="overlay editor-overlay">
+    <view v-if="editorVisible" class="overlay editor-overlay" :style="safeStyles.overlay">
       <scroll-view class="editor-card" scroll-y @tap.stop>
         <view class="editor-content">
-        <view class="editor-head"><view><text class="sheet-kicker">MOVEMENT DETAILS</text><text class="sheet-title">动作详情</text></view><text class="close" @tap="closeEditor">×</text></view>
+        <view class="editor-head"><button class="nav-back" @tap="closeEditor">‹</button><view><text class="sheet-kicker">MOVEMENT DETAILS</text><text class="sheet-title">动作详情</text></view></view>
         <view class="field"><text class="field-label">个人显示名称</text><input v-model="editor.personalDisplayName" maxlength="40" :placeholder="editor.defaultDisplayName||'使用系统默认名称'"/></view>
         <view class="edit-guide"><view class="guide-spark">✦</view><text>留空会恢复系统默认名称；这里只修改你的显示名称，不改变系统动作本体。</text></view>
         <view class="field"><text class="field-label">系统标准名称</text><view class="select-box">{{ editor.standardName || '—' }}</view></view>
@@ -78,6 +78,7 @@
 <script setup>
 import { computed, reactive, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
+import { pageSafeStyles } from '../../utils/page-safe-area'
 import { addExerciseToLibrary, deleteExercise, getExercises, updateExercise } from '../../api/exercises'
 import {
   bodyPartOptions,recordMethodOptions,equipmentOptions,muscleOptions,
@@ -96,6 +97,7 @@ const editor=reactive(emptyEditor())
 const savedTheme=Number(uni.getStorageSync(THEME_STORAGE_KEY))
 const themeIndex=ref(Number.isInteger(savedTheme)&&themes[savedTheme]?savedTheme:0)
 const themeStyle=computed(()=>{const t=themes[themeIndex.value];return{'--accent':t.accent,'--accent-2':t.accent2,'--pale':t.pale,'--pale-2':t.pale2,'--glow-rgb':t.glow}})
+const safeStyles=pageSafeStyles()
 const syncText=computed(()=>mutating.value?'正在保存':loading.value?'正在同步':loadError.value?'同步失败':'云端已同步')
 
 function list(value){return Array.isArray(value)?value:[]}
@@ -211,4 +213,5 @@ page{background:#f5f5fa}.page{position:relative;min-height:100vh;overflow:hidden
 .tag-editor{gap:6rpx 0!important;overflow:visible;padding:12rpx 13rpx!important}.chain-item,.chain-add{position:relative;display:flex;align-items:center;gap:8rpx;min-height:42rpx;margin:3rpx 18rpx 3rpx 0;padding:0 14rpx 0 10rpx;border:1rpx solid rgba(var(--glow-rgb),.22);border-radius:15rpx;color:var(--accent);background:linear-gradient(135deg,rgba(var(--glow-rgb),.1),rgba(255,255,255,.96));box-shadow:0 6rpx 14rpx rgba(var(--glow-rgb),.08);font-size:17rpx;font-weight:800;transition:transform .18s,box-shadow .18s}.chain-item::after,.chain-add::after{content:'';position:absolute;left:100%;top:50%;width:18rpx;height:2rpx;background:linear-gradient(90deg,rgba(var(--glow-rgb),.38),rgba(var(--glow-rgb),.12))}.chain-item:active{transform:scale(.96);box-shadow:0 2rpx 8rpx rgba(var(--glow-rgb),.08)}.chain-node{width:10rpx;height:10rpx;border:3rpx solid var(--accent);border-radius:50%;background:#fff;box-shadow:0 0 0 3rpx rgba(var(--glow-rgb),.08)}.chain-add{justify-content:center;min-width:53rpx;padding:0 10rpx;color:#fff;border-color:transparent;background:linear-gradient(135deg,var(--accent),var(--accent-2));font-size:23rpx}.chain-add .chain-node{border-color:#fff;background:transparent;box-shadow:none}.muscle-chain{color:#58779b;border-color:rgba(88,119,155,.22);background:linear-gradient(135deg,rgba(88,119,155,.1),#fff)}.muscle-chain .chain-node{border-color:#6e8bab}.secondary-chain{color:#8a7098;border-color:rgba(138,112,152,.22);background:linear-gradient(135deg,rgba(138,112,152,.1),#fff)}.secondary-chain .chain-node{border-color:#9a82a7}
 .advanced-panel{margin-top:0;padding:5rpx 18rpx 22rpx!important;border:1rpx solid rgba(var(--glow-rgb),.11);border-top:0;border-radius:0 0 23rpx 23rpx!important;background:linear-gradient(180deg,rgba(var(--glow-rgb),.055),rgba(255,255,255,.72))!important}.advanced-toggle{margin-bottom:0}.variant-chain{color:#7a679e;border-color:rgba(122,103,158,.24);background:linear-gradient(135deg,rgba(122,103,158,.12),#fff)}.variant-chain .chain-node{border-color:#8d79ad}.editor-actions{padding-bottom:6rpx}.editor-actions.single{grid-template-columns:1fr}.editor-actions.single .save-button{width:100%}
 @media(max-width:700px){.editor-content{padding:27rpx 23rpx calc(38rpx + env(safe-area-inset-bottom))}.editor-card{height:92vh!important}.edit-guide{font-size:15rpx}.chain-item,.chain-add{min-height:40rpx;font-size:16rpx}}
+.topbar{display:flex;justify-content:flex-start;gap:17rpx}.nav-back{flex:none;width:62rpx;height:62rpx;margin:0;padding:0;border:0;border-radius:19rpx;color:var(--accent);background:rgba(255,255,255,.78);font-size:42rpx;line-height:56rpx}.nav-back::after{border:0}.nav-title text{display:block}.nav-title text:first-child{color:var(--accent);font-size:15rpx;font-weight:750;letter-spacing:2rpx}.nav-title text:last-child{font-size:30rpx;font-weight:760}.sync-badge{margin-left:auto}.overlay{box-sizing:border-box;padding-top:calc(var(--page-safe-top) + 12rpx)}.bottom-sheet{max-height:calc(100vh - var(--page-safe-top) - 12rpx)}.editor-card{height:min(88vh,calc(100vh - var(--page-safe-top) - 38rpx))!important}.sheet-head,.editor-head{justify-content:flex-start;gap:14rpx}.sheet-head>view,.editor-head>view{min-width:0}.sheet-head .nav-back,.editor-head .nav-back{background:var(--pale)}
 </style>

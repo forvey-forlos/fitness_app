@@ -1,14 +1,14 @@
 <template>
   <view class="page" :style="themeStyle">
     <view class="ambient" aria-hidden="true"><view class="blob blob-one"/><view class="blob blob-two"/><view class="dot-field"/></view>
-    <view class="shell">
+    <view class="shell" :style="safeStyles.shell">
       <view class="topbar">
-        <view class="back" hover-class="pressed" @tap="goBack"><text>‹</text><text>返回首页</text></view>
-        <view class="brand"><view class="brand-mark"/><text>FIT NOTE</text></view>
+        <button class="nav-back" hover-class="pressed" @tap="goBack">‹</button>
+        <view class="nav-title"><text>BODY PROFILE</text><text>身体数据</text></view>
         <view class="sync-badge"><view class="sync-dot"/><text>{{ syncText }}</text></view>
       </view>
       <view class="hero">
-        <view><text class="eyebrow">BODY PROFILE</text><text class="title">身体数据</text><text class="subtitle">把每次测量，装订成看得见的改变</text></view>
+        <view><text class="eyebrow">YOUR RECORDS</text><text class="title">身体档案</text><text class="subtitle">把每次测量，装订成看得见的改变</text></view>
         <view class="completion"><view class="completion-icon">⌁</view><view><text class="completion-value">{{ filledCount }}</text><text class="completion-label">项已填写</text></view></view>
       </view>
 
@@ -60,9 +60,10 @@
       <view class="footer-tip" @tap="loadAll"><text>{{ loadError ? '!' : '✓' }}</text><text>{{ loadError || '身体档案与测量历史已同步到当前账号' }}</text></view>
     </view>
 
-    <view v-if="paperVisible" class="paper-overlay" :class="{filing:paperPhase==='filing'}" @tap.self="closePaper">
+    <view v-if="paperVisible" class="paper-overlay" :style="safeStyles.overlay" :class="{filing:paperPhase==='filing'}" @tap.self="closePaper">
       <view class="paper-stage">
         <view class="review-paper">
+          <view class="paper-nav"><button class="nav-back" @tap="closePaper">‹</button><view><text>{{ paperMode==='save'?'NEW RECORD':'MEASUREMENT' }}</text><text>{{ paperMode==='save'?'本次身体数据':'测量记录' }}</text></view></view>
           <view class="paper-topline"><text>FIT NOTE</text><text>{{ paperMode==='save' ? 'NEW RECORD' : 'MEASUREMENT' }}</text></view>
           <text class="paper-title">{{ paperMode==='save' ? '本次身体数据' : '测量记录' }}</text><text class="paper-time">{{ paperDate }}</text><view class="paper-rule"/>
           <view class="paper-data"><view v-for="item in paperItems" :key="item.key" class="paper-data-row"><text>{{ item.name }}</text><text>{{ item.value }} {{ item.unit }}</text></view></view>
@@ -84,6 +85,7 @@ import { computed, reactive, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { createMeasurement, getBodyProfile, getMeasurements, updateBodyProfile } from '../../api/body'
 import { USER_KEY } from '../../api/auth'
+import { pageSafeStyles } from '../../utils/page-safe-area'
 
 const THEME_STORAGE_KEY='fit_note_theme_index'
 const DATA_STORAGE_KEY='fit_note_body_profile'
@@ -121,6 +123,7 @@ const measurementKeys=profileKeys.filter(key=>key!=='height')
 const savedTheme=Number(uni.getStorageSync(THEME_STORAGE_KEY))
 const themeIndex=ref(Number.isInteger(savedTheme)&&savedTheme>=0&&savedTheme<themes.length?savedTheme:0)
 const themeStyle=computed(()=>{const t=themes[themeIndex.value];return{'--accent':t.accent,'--accent-2':t.accent2,'--pale':t.pale,'--pale-2':t.pale2,'--glow-rgb':t.glow}})
+const safeStyles=pageSafeStyles()
 const savedUi=uni.getStorageSync(scopedDataKey)||{}
 
 function initialMetrics(){
@@ -220,4 +223,5 @@ page{background:#f5f5fa}.page{position:relative;min-height:100vh;overflow:hidden
 @keyframes overlay-in{from{opacity:0}to{opacity:1}}@keyframes paper-rise{from{opacity:0;transform:translateY(110rpx) rotate(2deg) scale(.92)}to{opacity:1;transform:none}}@keyframes paper-file{0%{transform:none}42%{transform:translateY(-25rpx) scale(.96)}100%{transform:translateY(600rpx) scale(.76);opacity:.35}}@keyframes folder-close{0%,55%{transform:perspective(500px) rotateX(0)}100%{transform:perspective(500px) rotateX(-7deg)}}
 @media (max-width:760px){.shell{padding-left:22rpx;padding-right:22rpx}.topbar{grid-template-columns:1fr auto}.brand{display:none}.sync-badge{font-size:17rpx}.hero{margin-top:43rpx}.subtitle{max-width:430rpx}.completion{padding:13rpx 16rpx}.completion-icon{width:48rpx;height:48rpx}.data-grid{grid-template-columns:1fr}.section{padding:23rpx;border-radius:30rpx}.metric-row{gap:10rpx;padding:11rpx 9rpx}.metric-symbol{width:48rpx;height:48rpx}.metric-hint{display:none}.metric-input-wrap{width:135rpx}.drag-handle{width:36rpx}.paper-data{grid-template-columns:1fr}.paper-stage{height:86vh}.review-paper{max-height:75vh;padding:34rpx 30rpx 32rpx}.archive-folder{height:150rpx}.folder-front{inset:32rpx 0 0}.paper-actions{flex-direction:column}.paper-actions button{width:100%}}
 @media (min-width:1000px){.shell{padding-left:60px;padding-right:60px}.hero{margin-top:34px}.section{padding:28px}.metric-row{min-height:68px;padding:9px 13px}.metric-input-wrap{width:135px}.save-button{height:44px;line-height:44px}.history-paper{width:210px;min-height:160px}.paper-overlay{padding:24px}}
+.topbar{display:flex;justify-content:flex-start;gap:17rpx}.nav-back{flex:none;width:62rpx;height:62rpx;margin:0;padding:0;border:0;border-radius:19rpx;color:var(--accent);background:rgba(255,255,255,.78);font-size:42rpx;line-height:56rpx}.nav-back::after{border:0}.nav-title text,.paper-nav>view text{display:block}.nav-title text:first-child,.paper-nav>view text:first-child{color:var(--accent);font-size:15rpx;font-weight:750;letter-spacing:2rpx}.nav-title text:last-child,.paper-nav>view text:last-child{font-size:30rpx;font-weight:760}.sync-badge{margin-left:auto}.paper-overlay{box-sizing:border-box;padding-top:calc(var(--page-safe-top) + 18rpx)}.paper-stage{height:min(870rpx,calc(100vh - var(--page-safe-top) - 55rpx))}.review-paper{max-height:calc(100vh - var(--page-safe-top) - 90rpx)}.paper-nav{display:flex;align-items:center;gap:14rpx;margin-bottom:22rpx}.paper-nav .nav-back{background:var(--pale)}
 </style>

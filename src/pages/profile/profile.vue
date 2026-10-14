@@ -75,7 +75,7 @@
     <view v-if="crop.visible" class="crop-modal">
       <view class="crop-mask" />
       <view class="crop-sheet">
-        <view class="crop-head"><text>裁剪头像</text><button @tap="closeCrop">取消</button></view>
+        <view class="crop-head"><button class="crop-back" @tap="closeCrop">‹</button><view><text>AVATAR CROP</text><text>裁剪头像</text></view></view>
         <view class="crop-stage" :style="{width:`${cropStageSize}px`,height:`${cropStageSize}px`}" @touchstart.stop="startCropDrag" @touchmove.stop.prevent="moveCropDrag" @touchend.stop="endCropDrag">
           <image class="crop-image" :src="crop.sourcePath" mode="scaleToFill" :style="cropImageStyle" />
           <view class="crop-grid"><view /><view /><view /><view /></view>
@@ -100,6 +100,7 @@ import { logout } from '../../api/auth'
 import { getCurrentUser, updateCurrentUser } from '../../api/user'
 import { deleteAvatar,uploadAvatar } from '../../api/avatar'
 import { bindWechat,getWechatBindingStatus,unbindWechat } from '../../api/wechatBinding'
+import { pageSafeTop } from '../../utils/page-safe-area'
 import { getUsernameError, sanitizeUsername } from '../../utils/username'
 
 const THEME_KEY='fit_note_theme_index'
@@ -113,7 +114,8 @@ const pendingAvatarPath=ref(''),avatarLoadFailed=ref(false),cropExporting=ref(fa
 const crop=reactive({visible:false,sourcePath:'',sourceWidth:1,sourceHeight:1,scale:1,x:0,y:0,dragging:false,startTouchX:0,startTouchY:0,startX:0,startY:0})
 const form=reactive({displayName:'',accountCode:'',avatarUrl:'',timezone:'Asia/Shanghai'})
 const errors=reactive({username:''})
-const themeStyle=computed(()=>{const t=themes[themeIndex.value];return{'--accent':t.accent,'--accent-2':t.accent2,'--pale':t.pale,'--pale-2':t.pale2,'--glow-rgb':t.glow}})
+const overlaySafeTop=pageSafeTop()
+const themeStyle=computed(()=>{const t=themes[themeIndex.value];return{'--accent':t.accent,'--accent-2':t.accent2,'--pale':t.pale,'--pale-2':t.pale2,'--glow-rgb':t.glow,'--page-safe-top':`${overlaySafeTop}px`}})
 const avatarInitial=computed(()=>Array.from(form.displayName||'F')[0]||'F')
 const avatarDisplayUrl=computed(()=>pendingAvatarPath.value||form.avatarUrl)
 const cropStageSize=computed(()=>Math.min(uni.upx2px(520),360))
@@ -215,4 +217,5 @@ page{background:#f4f4fa}.page{position:relative;min-height:100vh;overflow:hidden
 .wechat-binding{display:flex;align-items:center;justify-content:space-between;gap:18rpx;margin:20rpx 0;padding:18rpx 0;border-top:1rpx solid rgba(var(--glow-rgb),.12);border-bottom:1rpx solid rgba(var(--glow-rgb),.12)}.binding-title{display:block;font-size:20rpx;font-weight:700}.binding-button{height:62rpx;margin:0;padding:0 20rpx;border:0;border-radius:18rpx;color:var(--accent);background:var(--pale);font-size:17rpx;line-height:62rpx}.binding-button:after{border:0}
 .avatar{position:relative}.avatar-editable{box-shadow:0 8rpx 22rpx rgba(var(--glow-rgb),.22)}.avatar-hit{position:absolute;z-index:3;inset:0;width:100%;height:100%;margin:0;padding:0;border:0;border-radius:50%;opacity:0}.avatar-hit:after{border:0}.avatar-edit-mark{position:absolute;z-index:2;right:0;bottom:0;width:31rpx;height:31rpx;display:grid;place-items:center;border:3rpx solid #fff;border-radius:50%;color:#fff;background:var(--accent);font-size:14rpx}.avatar-pending{margin-top:14rpx;padding:17rpx;border:1rpx solid rgba(var(--glow-rgb),.18);border-radius:19rpx;background:var(--pale-2)}.avatar-pending>text{display:block;color:#596174;font-size:17rpx}.pending-actions{display:flex;gap:12rpx;margin-top:13rpx}.pending-confirm,.pending-cancel{height:61rpx;margin:0;padding:0 22rpx;border:0;border-radius:16rpx;font-size:17rpx;line-height:61rpx}.pending-confirm{color:#fff;background:var(--accent)}.pending-cancel{color:#72798a;background:#fff}.pending-confirm:after,.pending-cancel:after{border:0}
 .crop-modal{position:fixed;z-index:80;inset:0;display:flex;align-items:flex-end;justify-content:center}.crop-mask{position:absolute;inset:0;background:rgba(28,31,43,.62);backdrop-filter:blur(8rpx)}.crop-sheet{position:relative;width:100%;box-sizing:border-box;padding:28rpx 28rpx calc(30rpx + env(safe-area-inset-bottom));border-radius:34rpx 34rpx 0 0;background:#fdfdff;box-shadow:0 -18rpx 60rpx rgba(23,27,45,.18)}.crop-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:23rpx}.crop-head>text{font-size:28rpx;font-weight:760}.crop-head button{height:55rpx;margin:0;padding:0 18rpx;border:0;color:#7f8695;background:transparent;font-size:18rpx;line-height:55rpx}.crop-head button:after{border:0}.crop-stage{position:relative;margin:auto;overflow:hidden;border-radius:28rpx;background:#171923;touch-action:none}.crop-image{position:absolute;transform:translate(-50%,-50%);will-change:left,top,width,height}.crop-grid{position:absolute;inset:0;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;pointer-events:none}.crop-grid view{border-right:1rpx solid rgba(255,255,255,.26);border-bottom:1rpx solid rgba(255,255,255,.26)}.crop-ring{position:absolute;inset:13rpx;border:2rpx solid rgba(255,255,255,.85);border-radius:50%;box-shadow:0 0 0 80rpx rgba(16,18,27,.2);pointer-events:none}.crop-help{display:block;margin-top:19rpx;color:#8a90a0;font-size:17rpx;text-align:center}.crop-slider{margin:13rpx 10rpx}.crop-actions{display:grid;grid-template-columns:1fr 1.5fr;gap:14rpx;margin-top:8rpx}.crop-reselect,.crop-confirm{height:74rpx;margin:0;border:0;border-radius:20rpx;font-size:19rpx;font-weight:700;line-height:74rpx}.crop-reselect{color:var(--accent);background:var(--pale)}.crop-confirm{color:#fff;background:linear-gradient(100deg,var(--accent),var(--accent-2))}.crop-reselect:after,.crop-confirm:after{border:0}.avatar-canvas{position:fixed;left:-10000px;top:0;width:512px;height:512px;pointer-events:none}@media(min-width:900px){.crop-modal{align-items:center}.crop-sheet{width:520px;padding:24px;border-radius:24px}.crop-actions{margin:10px auto 0;max-width:360px}}
+.crop-modal{box-sizing:border-box;padding-top:calc(var(--page-safe-top) + 12rpx)}.crop-sheet{max-height:calc(100vh - var(--page-safe-top) - 12rpx);overflow:auto}.crop-head{justify-content:flex-start;gap:14rpx}.crop-head>view text{display:block}.crop-head>view text:first-child{color:var(--accent);font-size:14rpx;font-weight:750;letter-spacing:2rpx}.crop-head>view text:last-child{font-size:28rpx;font-weight:760}.crop-back{flex:none;width:58rpx;height:58rpx;margin:0;padding:0;border:0;border-radius:18rpx;color:var(--accent);background:var(--pale);font-size:42rpx;line-height:54rpx}.crop-back::after{border:0}
 </style>
