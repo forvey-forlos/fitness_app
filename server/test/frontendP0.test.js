@@ -33,7 +33,8 @@ test('training create adapter returns the plan object from unified response data
 
 test('training page applies a validated direct plan and keeps edit/complete identifiers', () => {
   const source = readFileSync(path.resolve(__dirname, '../../src/pages/training-plan/training-plan.vue'), 'utf8')
-  assert.match(source, /applyPlan\(requirePlanResponse\(saved\)\)/)
+  assert.match(source, /const confirmed=requirePlanResponse\(saved\)/)
+  assert.match(source, /applyPlan\(confirmed\)/)
   for (const field of ['plan.id', 'plan.version', 'plan.status', 'plan.exercises', 'plan.planDate', 'plan.name']) {
     assert.ok(source.includes(field), `missing plan contract check: ${field}`)
   }

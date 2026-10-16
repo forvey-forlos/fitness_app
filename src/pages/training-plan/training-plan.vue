@@ -35,51 +35,49 @@
             <text class="column-label">训练部位 · 拖动排序</text>
             <view class="part-list">
               <view v-for="(part,partIndex) in planParts" :key="part.key" class="part-tab" :class="{active:selectedPartKey===part.key,dragging:partDragIndex===partIndex}" hover-class="tab-pressed" @tap="selectedPartKey=part.key">
-                <view class="part-symbol">{{ part.icon }}</view><view class="part-tab-copy"><text>{{ part.name }}</text><text>{{ part.actions.length }} 项</text></view><text class="part-remove" @tap.stop="removePart(part)">×</text>
-                <view v-if="!todayCompleted" class="part-drag-handle" @touchstart.stop.prevent="startPartTouchDrag($event,partIndex)" @touchmove.stop.prevent="movePartTouchDrag" @touchend.stop.prevent="finishPartDrag" @touchcancel.stop.prevent="finishPartDrag" @mousedown.stop.prevent="startPartMouseDrag($event,partIndex)">⠿</view>
+                <view class="part-symbol">{{ part.icon }}</view><view class="part-tab-copy"><text>{{ part.name }}</text><text>{{ part.actions.length }} 项</text></view><text v-if="!currentPlan||planEditMode" class="part-remove" @tap.stop="removePart(part)">×</text>
+                <view v-if="!todayCompleted&&(!currentPlan||planEditMode)" class="part-drag-handle" @touchstart.stop.prevent="startPartTouchDrag($event,partIndex)" @touchmove.stop.prevent="movePartTouchDrag" @touchend.stop.prevent="finishPartDrag" @touchcancel.stop.prevent="finishPartDrag" @mousedown.stop.prevent="startPartMouseDrag($event,partIndex)">⠿</view>
               </view>
             </view>
-            <button class="add-part" hover-class="pressed" @tap="addPart"><text>＋</text><text>添加部位</text></button>
+            <button v-if="!currentPlan||planEditMode" class="add-part" hover-class="pressed" @tap="addPart"><text>＋</text><text>添加部位</text></button>
           </view>
 
           <view class="action-column">
             <template v-if="activePart">
-              <view class="action-column-head"><view><text class="column-title">{{ activePart.name }}动作</text><text>{{ activePart.actions.length }} 个已选动作</text></view><button hover-class="pressed" @tap="addAction">＋ 添加动作</button></view>
+              <view class="action-column-head"><view><text class="column-title">{{ activePart.name }}动作</text><text>{{ activePart.actions.length }} 个已选动作</text></view><button v-if="!currentPlan||planEditMode" hover-class="pressed" @tap="addAction">＋ 添加动作</button></view>
               <view v-if="activePart.actions.length" class="action-list">
                 <view v-for="(action,actionIndex) in activePart.actions" :key="action.id+'-'+actionIndex" class="action-editor" :class="{dragging:dragIndex===actionIndex}">
                   <view class="action-head">
                     <view class="action-name"><view class="state-dot" :class="{done:isActionDone(action)}">{{ isActionDone(action)?'✓':'' }}</view><view><text>{{ action.name }}</text><text>{{ action.equipment||'徒手' }}</text></view></view>
-                    <view class="action-tools"><text class="remove-action" @tap="removeAction(action)">移除</text><view class="drag-handle" @touchstart.stop.prevent="startTouchDrag($event,actionIndex)" @touchmove.stop.prevent="moveTouchDrag" @touchend.stop="finishDrag" @mousedown.stop.prevent="startMouseDrag($event,actionIndex)">⠿</view></view>
+                    <view class="action-tools"><text v-if="!currentPlan||planEditMode" class="remove-action" @tap="removeAction(action)">移除</text><view class="drag-handle" @touchstart.stop.prevent="startTouchDrag($event,actionIndex)" @touchmove.stop.prevent="moveTouchDrag" @touchend.stop="finishDrag" @mousedown.stop.prevent="startMouseDrag($event,actionIndex)">⠿</view></view>
                   </view>
                   <picker v-if="action.variants.length" :range="action.variants" range-key="name" @change="selectVariant(action,$event)"><view class="method-caption"><text>动作变式：{{ action.variant?.name||'默认' }}</text><text>选择 ›</text></view></picker>
                   <view class="method-caption" @tap="editRecordMethods(action)"><text>记录方式：{{ action.recordMethods.map(recordMethodLabel).join('、') }}</text><text>{{ todayCompleted?'已锁定':'调整 ›' }}</text></view>
                   <view class="planned-sets"><text>预计组数</text><input v-model="action.plannedSets" type="number" :disabled="todayCompleted" maxlength="3"/><text>组</text></view>
-                  <view v-for="(group,groupIndex) in action.plannedGroups" :key="group.id" class="metric-row target-row" :class="{'group-flash':group.flash}" :style="metricGridStyle(action)" @tap.self="incrementGroup(group)">
+                  <view v-for="(group,groupIndex) in action.plannedGroups" :key="group.id" class="metric-row target-row" :class="{'group-flash':group.flash}" @tap.self="incrementGroup(group)">
                     <text class="row-label">计划</text>
-                    <label class="set-count-field" @tap.stop><text>组数</text><input v-model="group.set_count" :disabled="todayCompleted" type="number" maxlength="3"/></label>
-                    <label v-for="method in action.recordMethods" :key="'target-'+method" @tap.stop><text>{{ recordMethodLabel(method) }}</text><input v-model="group.values[method]" :disabled="todayCompleted" :type="metricInputType(method)" maxlength="8" placeholder="0"/></label>
+                    <label class="set-count-field" @tap.stop><text>组数</text><input v-model="group.set_count" :disabled="todayCompleted" type="number" maxlength="3"/><text v-if="group.burst" class="group-burst" :style="{'--burst-x':group.burstX+'rpx','--burst-y':group.burstY+'rpx'}">+1</text></label>
+                    <view class="metric-fields"><label v-for="method in action.recordMethods" :key="'target-'+method" @tap.stop><text>{{ recordMethodLabel(method) }}</text><input v-model="group.values[method]" :disabled="todayCompleted" :type="metricInputType(method)" maxlength="8" placeholder="0"/></label></view>
                     <text v-if="action.plannedGroups.length>1&&!todayCompleted" class="group-remove" @tap.stop="removePlannedGroup(action,groupIndex)">×</text><view v-else class="group-action-placeholder"/>
-                    <text v-if="group.burst" class="group-burst" :style="{'--burst-x':group.burstX+'rpx','--burst-y':group.burstY+'rpx'}">+1</text>
                   </view>
                   <button v-if="!todayCompleted" class="add-group" @tap="addPlannedGroup(action)">＋ 新增一组计划</button>
-                  <view v-for="(group,groupIndex) in (currentPlan?action.actualGroups:[])" :key="group.id" class="metric-row actual-row" :class="{'group-flash':group.flash}" :style="metricGridStyle(action)" @tap.self="incrementGroup(group)">
+                  <view v-for="(group,groupIndex) in (currentPlan&&!planEditMode?action.actualGroups:[])" :key="group.id" class="metric-row actual-row" :class="{'group-flash':group.flash}" @tap.self="incrementGroup(group)">
                     <text class="row-label">实际</text>
-                    <label class="set-count-field" @tap.stop><text>组数</text><input v-model="group.set_count" :disabled="todayCompleted" type="number" maxlength="3"/></label>
-                    <label v-for="method in action.recordMethods" :key="group.id+'-'+method" @tap.stop><text>{{ recordMethodLabel(method) }}</text><input v-model="group.values[method]" :disabled="todayCompleted" :type="metricInputType(method)" maxlength="8" placeholder="输入"/></label>
+                    <label class="set-count-field" @tap.stop><text>组数</text><input v-model="group.set_count" :disabled="todayCompleted" type="number" maxlength="3"/><text v-if="group.burst" class="group-burst" :style="{'--burst-x':group.burstX+'rpx','--burst-y':group.burstY+'rpx'}">+1</text></label>
+                    <view class="metric-fields"><label v-for="method in action.recordMethods" :key="group.id+'-'+method" @tap.stop><text>{{ recordMethodLabel(method) }}</text><input v-model="group.values[method]" :disabled="todayCompleted" :type="metricInputType(method)" maxlength="8" placeholder="输入"/></label></view>
                     <text v-if="!todayCompleted" class="group-remove" @tap.stop="removeGroup(action,groupIndex)">×</text><view v-else class="group-action-placeholder"/>
-                    <text v-if="group.burst" class="group-burst" :style="{'--burst-x':group.burstX+'rpx','--burst-y':group.burstY+'rpx'}">+1</text>
                   </view>
-                  <button v-if="currentPlan&&!todayCompleted" class="add-group" hover-class="pressed" @tap="addGroup(action)">＋ 新增一组</button>
+                  <button v-if="currentPlan&&!todayCompleted&&!planEditMode" class="add-group" hover-class="pressed" @tap="addGroup(action)">＋ 新增一组</button>
                 </view>
               </view>
-              <view v-else class="action-empty"><view>⌁</view><text>尚未添加具体动作</text><text>动作选项来自“动作管理”页面</text><button hover-class="pressed" @tap="addAction">从动作库添加</button></view>
+              <view v-else class="action-empty"><view>⌁</view><text>尚未添加具体动作</text><text>动作选项来自“动作管理”页面</text><button v-if="!currentPlan||planEditMode" hover-class="pressed" @tap="addAction">从动作库添加</button></view>
             </template>
             <view v-else class="part-empty"><view>＋</view><text>先从左侧添加训练部位</text><text>可选择动作管理中已有动作的部位</text></view>
           </view>
         </view>
-        <button v-if="!currentPlan" class="complete-button" :disabled="saving||loading" hover-class="pressed" @tap="savePlan">创建训练计划</button>
+        <button v-if="!currentPlan||planEditMode" class="complete-button" :disabled="saving||loading" hover-class="pressed" @tap="savePlan">创建训练计划</button>
+        <button v-else-if="!todayCompleted" class="complete-button update" :disabled="completing" hover-class="pressed" @tap="completeTraining">{{ completing?'正在完成训练…':'完成本次训练' }}</button>
         <button v-if="!todayCompleted" class="complete-button template-save-button" :disabled="savingTemplate||loading" @tap="openSaveTemplate">保存训练模板</button>
-        <button v-if="currentPlan&&!todayCompleted" class="complete-button update" :disabled="completing" hover-class="pressed" @tap="completeTraining">{{ completing?'正在完成训练…':'完成该日训练' }}</button>
       </view>
       <view class="template-manager">
         <view class="content-head"><view><text class="section-title">模板管理</text><text class="section-caption">保存常用方案，发现新的训练灵感</text></view></view>
@@ -204,6 +202,8 @@ const legacyPart={abs:'core'}
 const equipmentLabels={barbell:'杠铃',dumbbell:'哑铃',machine:'器械',cable:'绳索',bodyweight:'徒手',other:'其他'}
 const themeIndex=ref(0),actionLibrary=ref([]),planParts=ref([]),selectedPartKey=ref('')
 const currentPlan=ref(null),selectedDate=ref(''),loading=ref(false),saving=ref(false),completing=ref(false),loadError=ref('')
+const planEditMode=ref(false)
+const removedRecordedActions=ref([])
 const templateChooserVisible=ref(false),templatePickerVisible=ref(false),myTemplates=ref([]),selectedTemplateIds=ref([]),templatePreview=ref(null)
 const saveTemplateVisible=ref(false),templateNameDraft=ref(''),savingTemplate=ref(false)
 const overduePlans=ref([]),overdueVisible=ref(false)
@@ -225,7 +225,7 @@ function getShellStyle(){
   return{}
 }
 const shellStyle=ref(getShellStyle())
-let dragStartY=0,mouseCleanup=null,partDragStartY=0,partMouseCleanup=null,draftSaveTimer=null,draftHydrating=false,cloudSaveTimer=null,cloudSavePromise=null,pageEntry=0
+let dragStartY=0,mouseCleanup=null,partDragStartY=0,partMouseCleanup=null,draftSaveTimer=null,draftHydrating=false,pageEntry=0
 const overlaySafeTop=pageSafeTop()
 const themeStyle=computed(()=>{const t=themes[themeIndex.value];return{'--accent':t.accent,'--accent-2':t.accent2,'--pale':t.pale,'--pale-2':t.pale2,'--glow-rgb':t.glow,'--page-safe-top':`${overlaySafeTop}px`}})
 const todayText=computed(()=>new Date(selectedDate.value+'T00:00:00').toLocaleDateString('zh-CN',{month:'long',day:'numeric',weekday:'long'}))
@@ -243,7 +243,7 @@ const planTitle=computed(()=>{if(currentPlan.value?.name)return currentPlan.valu
 const estimatedDuration=computed(()=>Math.max(20,totalActions.value*8))
 const todayCompleted=computed(()=>currentPlan.value?.status==='completed')
 const contentVisible=computed(()=>!!currentPlan.value||editorRevealed.value||planParts.value.length>0)
-const syncText=computed(()=>saving.value?'正在保存':loading.value?'正在同步':loadError.value?'保存失败 · 本地草稿已保留':hasUnsavedPlan()?'等待云端保存':currentPlan.value?'云端已保存':'尚未创建')
+const syncText=computed(()=>saving.value?'正在保存':loading.value?'正在加载':loadError.value?'提交失败 · 本地草稿已保留':hasUnsavedPlan()||planEditMode.value||!currentPlan.value&&planParts.value.length?'本地草稿 · 待提交':currentPlan.value?'计划已提交':'尚未创建')
 function pad(v){return String(v).padStart(2,'0')}
 function dateKey(){const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`}
 function list(value){return Array.isArray(value)?value:[]}
@@ -273,11 +273,12 @@ function saveLocalDraft(){
   if(draftHydrating)return
   if(!/^\d{4}-\d{2}-\d{2}$/.test(selectedDate.value||''))return
   const newPlanHasContent=!currentPlan.value&&planParts.value.length>0
-  if(todayCompleted.value||!newPlanHasContent&&!hasUnsavedPlan()){clearLocalDraft();return}
+  if(todayCompleted.value||!newPlanHasContent&&!hasUnsavedPlan()&&!planEditMode.value){clearLocalDraft();return}
   uni.setStorageSync(draftStorageKey(),{
     schemaVersion:1,userScope:USER_SCOPE,planDate:selectedDate.value,
     basePlanId:currentPlan.value?.id||null,basePlanVersion:currentPlan.value?.version||null,
-    selectedPartKey:selectedPartKey.value,workoutStartedAt:workoutStartedAt.value,
+    selectedPartKey:selectedPartKey.value,workoutStartedAt:workoutStartedAt.value,planEditMode:planEditMode.value,
+    removedRecordedActions:removedRecordedActions.value,
     planParts:JSON.parse(JSON.stringify(planParts.value)),updatedAt:new Date().toISOString()
   })
 }
@@ -285,30 +286,10 @@ function scheduleLocalDraftSave(){
   if(loading.value)return
   if(draftSaveTimer)clearTimeout(draftSaveTimer)
   draftSaveTimer=setTimeout(()=>{draftSaveTimer=null;saveLocalDraft()},120)
-  if(currentPlan.value&&!todayCompleted.value){if(cloudSaveTimer)clearTimeout(cloudSaveTimer);cloudSaveTimer=setTimeout(()=>{cloudSaveTimer=null;flushCloudSave()},800)}
 }
 function flushLocalDraft(){
   if(draftSaveTimer){clearTimeout(draftSaveTimer);draftSaveTimer=null}
   saveLocalDraft()
-  if(cloudSaveTimer){clearTimeout(cloudSaveTimer);cloudSaveTimer=null}
-  if(currentPlan.value&&!todayCompleted.value&&hasUnsavedPlan())flushCloudSave()
-}
-async function flushCloudSave(){
-  if(!currentPlan.value||todayCompleted.value||!hasUnsavedPlan())return cloudSavePromise
-  if(cloudSavePromise)return cloudSavePromise
-  const plan=currentPlan.value,entry=pageEntry,signature=draftSignature(),data=payload()
-  if(!validPayload(data,{silent:true})){loadError.value='请核对组数或训练数据';saveLocalDraft();return}
-  cloudSavePromise=(async()=>{
-    saving.value=true;loadError.value=''
-    try{
-      const saved=requirePlanResponse(await updateTrainingPlan(plan.id,{...data,version:plan.version}))
-      if(entry!==pageEntry||selectedDate.value!==data.planDate)return
-      if(draftSignature()===signature){applyPlan(saved);clearLocalDraft()}
-      else{currentPlan.value=saved;savedDraftSignature.value=signature;saveLocalDraft()}
-    }catch(error){loadError.value=error?.message||'云端保存失败';saveLocalDraft();uni.showToast({title:'云端保存失败，已保留本地草稿',icon:'none'})}
-    finally{saving.value=false;cloudSavePromise=null;if(entry===pageEntry&&hasUnsavedPlan()&&!loadError.value){cloudSaveTimer=setTimeout(()=>{cloudSaveTimer=null;flushCloudSave()},300)}}
-  })()
-  return cloudSavePromise
 }
 function restoreLocalDraft(){
   const draft=uni.getStorageSync(draftStorageKey())
@@ -322,8 +303,8 @@ function restoreLocalDraft(){
     return false
   }
   if(!sameVersion){
-    uni.showModal({title:'本地草稿与云端版本冲突',content:'云端计划已在其他位置更新。是否恢复本机草稿并覆盖云端版本？',confirmText:'恢复草稿',cancelText:'保留云端',success:result=>{
-      if(result.confirm){applyStoredDraft(draft);saveLocalDraft();flushCloudSave()}
+    uni.showModal({title:'本地草稿与云端版本冲突',content:'云端计划已在其他位置更新。可恢复本机草稿继续编辑；提交时仍会检查版本，不会自动覆盖云端。',confirmText:'恢复草稿',cancelText:'保留云端',success:result=>{
+      if(result.confirm){applyStoredDraft(draft);saveLocalDraft()}
       else clearLocalDraft()
     }})
     return false
@@ -338,6 +319,8 @@ function applyStoredDraft(draft){
   selectedPartKey.value=planParts.value.some(part=>part.key===draft.selectedPartKey)
     ?draft.selectedPartKey:planParts.value[0]?.key||''
   workoutStartedAt.value=draft.workoutStartedAt||workoutStartedAt.value
+  planEditMode.value=!!draft.planEditMode&&!!currentPlan.value
+  removedRecordedActions.value=Array.isArray(draft.removedRecordedActions)?draft.removedRecordedActions:[]
 }
 function hasMetricValue(value){return value!==''&&value!==null&&value!==undefined&&Number.isFinite(Number(value))}
 function isActionDone(action){return action.actualGroups.length>0&&action.actualGroups.every(group=>action.recordMethods.every(method=>hasMetricValue(group.values[method])))}
@@ -347,10 +330,12 @@ function applyPlan(plan){
   const previousPlanId=currentPlan.value?.id
   const actualByExercise=new Map(planParts.value.flatMap(part=>part.actions.map(action=>[action.exerciseId,action.actualGroups.map(group=>({...group,values:{...group.values}}))])))
   currentPlan.value=plan||null
+  removedRecordedActions.value=[]
   if(plan?.status==='draft'&&previousPlanId!==plan.id)workoutStartedAt.value=new Date().toISOString()
   if(!plan||plan.status==='completed')workoutStartedAt.value=''
   if(!plan||completionAttempt.value&&(completionAttempt.value.planId!==plan.id||completionAttempt.value.version!==plan.version))completionAttempt.value=null
-  if(!plan){planParts.value=[];selectedPartKey.value='';draftPlanName.value='';editorRevealed.value=false;contentFloating.value=false;savedDraftSignature.value=draftSignature();return}
+  if(!plan){planParts.value=[];selectedPartKey.value='';draftPlanName.value='';editorRevealed.value=false;contentFloating.value=false;planEditMode.value=false;savedDraftSignature.value=draftSignature();return}
+  planEditMode.value=false
   editorRevealed.value=true
   draftPlanName.value=plan.name||''
   const byCategory=new Map()
@@ -391,7 +376,7 @@ async function load(){
   loading.value=true;draftHydrating=true;loadError.value=''
   try{await Promise.all([loadExerciseLibrary(),loadPlan()]);if(restoreLocalDraft())editorRevealed.value=true}
   catch(error){showError(error,'训练计划加载失败')}
-  finally{loading.value=false;draftHydrating=false;if(currentPlan.value&&!todayCompleted.value&&hasUnsavedPlan()&&!loadError.value)cloudSaveTimer=setTimeout(()=>{cloudSaveTimer=null;flushCloudSave()},800)}
+  finally{loading.value=false;draftHydrating=false}
 }
 const OVERDUE_ACK_KEY='fit_note_overdue_ack_'+USER_SCOPE
 async function checkOverduePlans(today){
@@ -408,22 +393,23 @@ async function checkOverduePlans(today){
 }
 function acknowledgeOverdue(){overdueVisible.value=false;uni.setStorageSync(OVERDUE_ACK_KEY,dateKey())}
 function ensureEditable(){if(!todayCompleted.value)return true;uni.showToast({title:'已完成计划不可修改',icon:'none'});return false}
-function addPart(){if(!ensureEditable())return;if(!availablePartChoices.value.length){uni.showToast({title:'训练部位已全部添加',icon:'none'});return}partChooserVisible.value=true}
+function canChangeStructure(){if(!ensureEditable())return false;if(currentPlan.value&&!planEditMode.value){uni.showToast({title:'请先点击“编辑计划”',icon:'none'});return false}return true}
+function rememberRemovedActual(action){if(action.actualGroups?.some(group=>Object.values(group.values||{}).some(hasMetricValue))&&!removedRecordedActions.value.some(item=>item.exerciseId===action.exerciseId))removedRecordedActions.value.push({exerciseId:action.exerciseId,name:action.name})}
+function addPart(){if(!canChangeStructure())return;if(!availablePartChoices.value.length){uni.showToast({title:'训练部位已全部添加',icon:'none'});return}partChooserVisible.value=true}
 function closePartChooser(){partChooserVisible.value=false}
 function choosePart(part){if(!part||planParts.value.some(item=>item.key===part.key))return;planParts.value.push({...part,actions:[]});selectedPartKey.value=part.key;closePartChooser()}
-function removePart(part){if(!ensureEditable())return;uni.showModal({title:`移除${part.name}？`,content:'该部位今天填写的数据会一并移除。',success:result=>{if(!result.confirm)return;planParts.value=planParts.value.filter(item=>item.key!==part.key);selectedPartKey.value=planParts.value[0]?.key||''}})}
+function removePart(part){if(!canChangeStructure())return;uni.showModal({title:`移除${part.name}？`,content:'该部位今天填写的数据会一并移除。',success:result=>{if(!result.confirm)return;part.actions.forEach(rememberRemovedActual);planParts.value=planParts.value.filter(item=>item.key!==part.key);selectedPartKey.value=planParts.value[0]?.key||''}})}
 function reorderPart(from,to){if(from===to||to<0||to>=planParts.value.length)return;const ordered=[...planParts.value],[item]=ordered.splice(from,1);ordered.splice(to,0,item);planParts.value=ordered;partDragIndex.value=to}
 function movePartDrag(y){if(partDragIndex.value<0)return;const delta=y-partDragStartY;if(Math.abs(delta)<55)return;const next=partDragIndex.value+(delta>0?1:-1);if(next>=0&&next<planParts.value.length){reorderPart(partDragIndex.value,next);partDragStartY=y}}
 function startPartTouchDrag(event,index){if(todayCompleted.value)return;partDragIndex.value=index;partDragStartY=event.touches?.[0]?.clientY||0}
 function movePartTouchDrag(event){movePartDrag(event.touches?.[0]?.clientY||partDragStartY)}
 function startPartMouseDrag(event,index){if(todayCompleted.value||typeof window==='undefined')return;partDragIndex.value=index;partDragStartY=event.clientY;const move=mouseEvent=>movePartDrag(mouseEvent.clientY);const end=()=>{window.removeEventListener('mousemove',move);window.removeEventListener('mouseup',end);partMouseCleanup=null;finishPartDrag()};partMouseCleanup=end;window.addEventListener('mousemove',move);window.addEventListener('mouseup',end)}
 function finishPartDrag(){if(partMouseCleanup&&typeof window!=='undefined')partMouseCleanup();partDragIndex.value=-1}
-function addAction(){if(!ensureEditable()||!activePart.value)return;actionChooserKeyword.value='';if(!availableActionChoices.value.length){uni.showToast({title:'该部位暂无更多动作，请先在动作管理添加',icon:'none'});return}actionChooserVisible.value=true}
+function addAction(){if(!canChangeStructure()||!activePart.value)return;actionChooserKeyword.value='';if(!availableActionChoices.value.length){uni.showToast({title:'该部位暂无更多动作，请先在动作管理添加',icon:'none'});return}actionChooserVisible.value=true}
 function closeActionChooser(){actionChooserVisible.value=false;actionChooserKeyword.value=''}
 function chooseAction(action){if(!action||!activePart.value)return;activePart.value.actions.push(catalogAction(action,activePart.value.key));closeActionChooser()}
-function removeAction(action){if(!ensureEditable())return;activePart.value.actions=activePart.value.actions.filter(item=>item.id!==action.id)}
+function removeAction(action){if(!canChangeStructure())return;rememberRemovedActual(action);activePart.value.actions=activePart.value.actions.filter(item=>item.id!==action.id)}
 function metricInputType(method){return method==='reps'?'number':'digit'}
-function metricGridStyle(action){return{gridTemplateColumns:`47rpx 54rpx repeat(${action.recordMethods.length},minmax(82rpx,1fr)) 35rpx`}}
 function addGroup(action){action.actualGroups.push(createGroup(action.recordMethods))}
 function addPlannedGroup(action){action.plannedGroups.push(createGroup(action.recordMethods))}
 function removePlannedGroup(action,index){action.plannedGroups.splice(index,1)}
@@ -476,8 +462,8 @@ async function changePlanDate(event){
   const next=event?.detail?.value
   if(!/^\d{4}-\d{2}-\d{2}$/.test(next||'')||next===selectedDate.value)return
   const switchDate=async()=>{
-    await flushCloudSave()
-    if(hasUnsavedPlan()&&currentPlan.value){uni.showToast({title:'当前修改未同步，已保留本地草稿',icon:'none'})}
+    flushLocalDraft()
+    if(hasUnsavedPlan()&&currentPlan.value){uni.showToast({title:'当前修改已保留本地草稿',icon:'none'})}
     const previous=selectedDate.value
     pageEntry++
     selectedDate.value=next;uni.setStorageSync(PLAN_LAST_DATE_KEY,next);loading.value=true;loadError.value=''
@@ -503,8 +489,14 @@ function requirePlanResponse(plan){
 async function savePlan(options={}){
   if(todayCompleted.value){uni.showToast({title:'已完成计划不可修改',icon:'none'});return}
   if(saving.value)return
-  const data=payload({includeActualGroups:options.includeActualGroups===true})
+  const data=payload({includeActualGroups:!!currentPlan.value||options.includeActualGroups===true})
   if(!validPayload(data))return
+  if(currentPlan.value&&planEditMode.value){
+    const retained=new Set(data.exercises.map(item=>item.exerciseId))
+    const removed=(currentPlan.value.exercises||[]).filter(item=>!retained.has(item.exerciseId)&&list(item.actualGroups).some(group=>Object.values(group.values||{}).some(hasMetricValue))).map(item=>({exerciseId:item.exerciseId,name:item.exercise?.name||'动作'}))
+    for(const item of removedRecordedActions.value)if(!retained.has(item.exerciseId)&&!removed.some(removedItem=>removedItem.exerciseId===item.exerciseId))removed.push(item)
+    if(removed.length){const accepted=await new Promise(resolve=>uni.showModal({title:'移除已记录的动作？',content:`${removed.map(item=>item.name).join('、')}已有实际训练数据。保存后这些动作及其实际记录将从本次计划移除。`,confirmText:'继续保存',success:result=>resolve(!!result.confirm),fail:()=>resolve(false)}));if(!accepted)return}
+  }
   const signature=draftSignature()
   saving.value=true;loadError.value=''
   try{
@@ -513,12 +505,12 @@ async function savePlan(options={}){
       :await createTrainingPlan(data,'plan-'+selectedDate.value+'-'+Date.now())
     const confirmed=requirePlanResponse(saved)
     if(draftSignature()===signature){applyPlan(confirmed);clearLocalDraft()}
-    else{currentPlan.value=confirmed;savedDraftSignature.value=signature;saveLocalDraft();cloudSaveTimer=setTimeout(()=>{cloudSaveTimer=null;flushCloudSave()},300)}
+    else{currentPlan.value=confirmed;savedDraftSignature.value=signature;saveLocalDraft()}
     uni.showToast({title:currentPlan.value?.version>1?'计划已更新':'计划已创建',icon:'success'})
   }catch(error){
     if(error?.code==='PLAN_VERSION_CONFLICT'){
-      clearLocalDraft()
-      uni.showModal({title:'计划已在其他位置更新',content:'不会覆盖服务器数据，点击确定后加载最新计划。',showCancel:false,success:()=>loadPlan().catch(loadError=>showError(loadError,'最新计划加载失败'))})
+      saveLocalDraft()
+      uni.showModal({title:'计划已在其他位置更新',content:'本地草稿已保留。请检查其他设备上的计划后再决定如何处理，不会自动覆盖云端。',showCancel:false})
     }else{
       showError(error,error?.code==='PLAN_DATE_CONFLICT'?'当天已有训练计划':'计划保存失败')
       if(error?.code==='PLAN_DATE_CONFLICT')await loadPlan().catch(()=>{})
@@ -527,10 +519,9 @@ async function savePlan(options={}){
   }finally{saving.value=false}
 }
 async function completeTraining(){
-  const plan=currentPlan.value
+  let plan=currentPlan.value
   if(!plan||plan.status==='completed'||completing.value)return
-  await flushCloudSave()
-  if(draftSignature()!==savedDraftSignature.value){uni.showToast({title:'请等待云端保存成功后再完成训练',icon:'none'});return}
+  if(planEditMode.value){uni.showToast({title:'请先保存当前计划',icon:'none'});return}
   if(!Array.isArray(plan.exercises)||!plan.exercises.length){uni.showToast({title:'计划至少需要一个动作',icon:'none'});return}
   const actualExercises=planParts.value.flatMap(part=>part.actions.map(action=>{
     const actualGroups=action.actualGroups.map(group=>({set_count:optionalNumber(group.set_count,true),values:Object.fromEntries(action.recordMethods.map(method=>[method,optionalNumber(group.values[method],method==='reps')]))}))
@@ -540,9 +531,21 @@ async function completeTraining(){
   if(actualExercises.some(item=>!item.actualGroups.length||item.actualGroups.some(group=>Object.values(group.values).some(value=>value===null||Number.isNaN(value))))) {
     uni.showToast({title:'请完整填写每个动作的实际数据',icon:'none'});return
   }
+  const data=payload({includeActualGroups:true})
+  if(!validPayload(data))return
   const durationMinutes=completionAttempt.value?completionAttempt.value.durationMinutes:await askCompletionDuration()
   if(durationMinutes===undefined)return
   if(Number.isNaN(durationMinutes)){uni.showToast({title:'训练时长请输入 1–1440 分钟',icon:'none'});return}
+  completing.value=true;loadError.value=''
+  if(hasUnsavedPlan()){
+    try{
+      const signature=draftSignature()
+      const confirmed=requirePlanResponse(await updateTrainingPlan(plan.id,{...data,version:plan.version}))
+      if(draftSignature()!==signature){saveLocalDraft();uni.showToast({title:'数据发生变化，请再次确认完成',icon:'none'});return}
+      currentPlan.value=confirmed;plan=confirmed;savedDraftSignature.value=signature;completionAttempt.value=null;saveLocalDraft()
+    }catch(error){saveLocalDraft();showError(error,'计划提交失败，本地草稿已保留');return}
+    finally{completing.value=false}
+  }
   if(!completionAttempt.value){
     const completedAt=new Date().toISOString()
     completionAttempt.value={
@@ -577,8 +580,8 @@ async function completeTraining(){
 function askCompletionDuration(){return new Promise(resolve=>uni.showModal({title:'完成本次训练',content:'可填写本次训练时长，留空也可以直接保存。',editable:true,placeholderText:'训练时长（分钟，可不填）',confirmText:'保存',success:result=>{if(!result.confirm){resolve(undefined);return}const value=String(result.content||'').trim();if(!value){resolve(null);return}const minutes=Number(value);resolve(Number.isInteger(minutes)&&minutes>=1&&minutes<=1440?minutes:NaN)},fail:()=>resolve(undefined)}))}
 function managePlan(){
   if(!currentPlan.value){openPlanCreator();return}
-  uni.showActionSheet({itemList:['刷新计划','删除计划'],success:({tapIndex})=>{
-    if(tapIndex===0){loadPlan().catch(error=>showError(error,'计划刷新失败'));return}
+  uni.showActionSheet({itemList:['编辑计划','删除计划'],success:({tapIndex})=>{
+    if(tapIndex===0){planEditMode.value=true;saveLocalDraft();return}
     uni.showModal({title:`删除“${currentPlan.value.name}”？`,content:'删除后当天将恢复为无计划状态。',success:async result=>{
       if(!result.confirm)return
       saving.value=true
@@ -658,9 +661,9 @@ async function saveCurrentAsTemplate(){
   finally{savingTemplate.value=false}
 }
 async function leavePlan(next){
-  flushLocalDraft();await flushCloudSave()
-  if(currentPlan.value&&hasUnsavedPlan()){
-    uni.showModal({title:'计划尚未同步',content:'修改已保留在本机草稿，云端尚未确认保存。仍要离开吗？',confirmText:'离开',success:result=>{if(result.confirm)next()}})
+  flushLocalDraft()
+  if(currentPlan.value&&(hasUnsavedPlan()||planEditMode.value)||!currentPlan.value&&planParts.value.length){
+    uni.showModal({title:'草稿已保留在本机',content:'当前填写内容尚未提交到服务器。返回本机该日期可继续编辑；换设备或清理缓存后无法恢复。',confirmText:'离开',success:result=>{if(result.confirm)next()}})
     return
   }
   next()
@@ -670,7 +673,6 @@ function goCommunity(){leavePlan(()=>uni.navigateTo({url:'/pages/template-commun
 function goBack(){leavePlan(()=>uni.navigateBack({fail:()=>uni.reLaunch({url:'/pages/home/home'})}))}
 onLoad(()=>{selectedDate.value=dateKey()})
 onShow(async()=>{
-  if(cloudSavePromise)await cloudSavePromise
   const today=dateKey()
   if(selectedDate.value!==today){flushLocalDraft();pageEntry++;selectedDate.value=today}
   await load()
@@ -695,7 +697,7 @@ page{background:#f6f5fa}.page{position:relative;min-height:100vh;overflow:hidden
 .template-save-button{margin-top:12rpx;color:var(--accent);background:var(--pale);box-shadow:none}.dialog-back{flex:none;margin-right:15rpx}.template-picker-row{display:flex;align-items:center;justify-content:space-between;min-height:67rpx;margin-top:10rpx;padding:0 17rpx;border:2rpx solid transparent;border-radius:16rpx;background:#fff;color:#495061;font-size:18rpx}.template-picker-row.active{border-color:var(--accent);background:var(--pale)}.template-info{display:grid;place-items:center;width:39rpx;height:39rpx;border-radius:50%;color:var(--accent);background:var(--pale);font-size:23rpx}.picker-confirm{height:68rpx;margin-top:20rpx;border:0;border-radius:18rpx;color:#fff;background:var(--accent);font-size:19rpx;line-height:68rpx}.picker-confirm[disabled]{opacity:.45}.picker-confirm::after{border:0}.template-preview-list{max-height:53vh;margin-top:18rpx}.template-preview-item{display:flex;justify-content:space-between;gap:12rpx;margin-top:8rpx;padding:12rpx;border-radius:13rpx;background:var(--pale-2);font-size:16rpx}.template-preview-item text:last-child{color:#9299a8}.template-name-input{height:66rpx;margin-top:23rpx;padding:0 16rpx;border:1rpx solid rgba(var(--glow-rgb),.25);border-radius:15rpx;background:#fff;font-size:18rpx}
 .choice-dialog{display:flex;flex-direction:column;overflow:hidden}.choice-list{max-height:56vh;margin-top:22rpx}.choice-item{display:grid;grid-template-columns:55rpx minmax(0,1fr) 38rpx;align-items:center;gap:14rpx;margin-bottom:11rpx;padding:15rpx;border:1rpx solid rgba(var(--glow-rgb),.12);border-radius:20rpx;background:#fff;color:var(--accent)}.choice-item>view:nth-child(2){min-width:0}.choice-item>view:nth-child(2) text{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.choice-item>view:nth-child(2) text:first-child{color:#41485a;font-size:19rpx;font-weight:800}.choice-item>view:nth-child(2) text:last-child{margin-top:4rpx;color:#969caa;font-size:14rpx;font-weight:500}.choice-item>text{font-size:27rpx;text-align:center}.choice-symbol{width:48rpx;height:48rpx;display:grid;place-items:center;border-radius:15rpx;background:var(--pale);font-size:21rpx}.choice-pressed{opacity:.72;transform:scale(.99)}.choice-search{display:flex;align-items:center;gap:10rpx;margin-top:22rpx;padding:0 17rpx;border:1rpx solid rgba(var(--glow-rgb),.16);border-radius:18rpx;background:#fff;color:var(--accent)}.choice-search input{height:70rpx;min-width:0;flex:1;color:#41485a;font-size:18rpx}.action-choice-list{margin-top:13rpx}.choice-empty{padding:46rpx 15rpx;color:#9298a6;font-size:17rpx;text-align:center}
 .template-dialog{width:min(690rpx,590px)}.template-choice-list{max-height:60vh}.template-choice-item{min-height:76rpx}.content-emerging{animation:surface-panel 680ms cubic-bezier(.18,.82,.24,1) both}.content-floating{animation:surface-drift 4.8s ease-in-out infinite}.content-emerging .content-head{animation:surface-item 620ms 110ms cubic-bezier(.16,.86,.25,1) both}.content-emerging .planner{animation:surface-item 720ms 260ms cubic-bezier(.16,.86,.25,1) both}.content-emerging .complete-button{animation:surface-item 650ms 430ms cubic-bezier(.16,.86,.25,1) both}.content-emerging .complete-button+.complete-button{animation-delay:540ms}@keyframes surface-panel{0%{opacity:0;transform:translateY(92rpx) scale(.97)}55%{opacity:1;transform:translateY(-8rpx) scale(1.006)}78%{transform:translateY(5rpx) scale(1)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes surface-item{0%{opacity:0;transform:translateY(44rpx)}70%{opacity:1;transform:translateY(-5rpx)}100%{opacity:1;transform:translateY(0)}}@keyframes surface-drift{0%,100%{transform:translateY(0)}50%{transform:translateY(-5rpx)}}
-.metric-row{position:relative}.set-count-field input{font-weight:800;color:var(--accent)}.group-flash{animation:group-pulse .28s ease-out}.group-burst{position:absolute;top:-12rpx;right:25%;color:var(--accent);font-size:19rpx;font-weight:800;pointer-events:none;animation:group-burst .65s ease-out forwards}@keyframes group-pulse{50%{background:rgba(var(--glow-rgb),.25)}}@keyframes group-burst{to{opacity:0;transform:translate(var(--burst-x),var(--burst-y))}}.overdue-dialog{display:flex;flex-direction:column}.overdue-list{max-height:50vh;margin-top:17rpx}.overdue-item,.conflict-item{display:flex;flex-direction:column;gap:5rpx;margin:8rpx 0;padding:13rpx;border-radius:13rpx;background:var(--pale-2);font-size:17rpx}.overdue-item text:first-child,.conflict-item text:first-child{color:var(--accent);font-weight:800}.conflict-item text:nth-child(2){font-weight:750}
+.metric-row{position:relative;grid-template-columns:35rpx 58rpx minmax(0,1fr) 28rpx;gap:5rpx;align-items:start;overflow:visible;isolation:isolate}.metric-row label{min-width:0}.metric-fields{display:grid;grid-template-columns:repeat(3,minmax(72rpx,1fr));gap:8rpx 5rpx;min-width:0;overflow-x:auto}.metric-fields label{min-width:0}.set-count-field{position:relative;z-index:2;display:block;width:58rpx;overflow:visible}.set-count-field input{font-weight:800;color:var(--accent)}.group-flash{z-index:3;animation:group-pulse .28s ease-out}.group-burst{position:absolute;z-index:20;top:-22rpx;left:50%;transform:translateX(-50%);color:var(--accent);font-size:19rpx;font-weight:800;white-space:nowrap;pointer-events:none;animation:group-burst .65s ease-out forwards}@keyframes group-pulse{50%{background:rgba(var(--glow-rgb),.25)}}@keyframes group-burst{to{opacity:0;transform:translate(calc(-50% + var(--burst-x)),var(--burst-y))}}.overdue-dialog{display:flex;flex-direction:column}.overdue-list{max-height:50vh;margin-top:17rpx}.overdue-item,.conflict-item{display:flex;flex-direction:column;gap:5rpx;margin:8rpx 0;padding:13rpx;border-radius:13rpx;background:var(--pale-2);font-size:17rpx}.overdue-item text:first-child,.conflict-item text:first-child{color:var(--accent);font-weight:800}.conflict-item text:nth-child(2){font-weight:750}
 @media (prefers-reduced-motion:reduce){.content-emerging,.content-floating,.content-emerging .content-head,.content-emerging .planner,.content-emerging .complete-button{animation-duration:1ms;animation-delay:0ms;animation-iteration-count:1}}
 .part-tab.dragging{z-index:3;transform:scale(1.035);box-shadow:0 14rpx 30rpx rgba(var(--glow-rgb),.2)}.part-drag-handle{display:grid;place-items:center;width:100%;height:29rpx;margin-top:5rpx;border-radius:9rpx;color:var(--accent);background:var(--pale);font-size:22rpx;cursor:grab;user-select:none}.part-remove{z-index:2}
 .method-dialog-head>view .dialog-kicker{margin:0 0 4rpx;color:var(--accent);font-size:13rpx;font-weight:750;letter-spacing:2rpx}.method-dialog-head>view text:nth-child(2){font-size:29rpx;font-weight:900}.method-dialog-head>view text:nth-child(3){margin-top:5rpx;color:#9297a5;font-size:17rpx;font-weight:400}

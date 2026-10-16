@@ -14,14 +14,16 @@ ON DUPLICATE KEY UPDATE
   body_part=VALUES(body_part);
 
 UPDATE exercises SET
+  name = CASE WHEN catalog_key = 'machine_chest_fly' THEN '正向飞鸟' ELSE name END,
+  name_normalized = CASE WHEN catalog_key = 'machine_chest_fly' THEN '正向飞鸟' ELSE name_normalized END,
   default_display_name_zh = CASE catalog_key
     WHEN 'seated_leg_press' THEN '倒蹬机'
-    WHEN 'machine_chest_fly' THEN '正向蝴蝶机'
+    WHEN 'machine_chest_fly' THEN '正向飞鸟'
     ELSE name
   END,
   default_display_name_normalized = CASE catalog_key
     WHEN 'seated_leg_press' THEN '倒蹬机'
-    WHEN 'machine_chest_fly' THEN '正向蝴蝶机'
+    WHEN 'machine_chest_fly' THEN '正向飞鸟'
     ELSE name_normalized
   END,
   standard_name_en = CASE catalog_key
@@ -86,7 +88,7 @@ VALUES
    JSON_ARRAY('back'),JSON_ARRAY('assistance_weight','reps'),'back','back',JSON_ARRAY('latissimus_dorsi'),JSON_ARRAY('teres_major','rhomboids','trapezius','biceps'),JSON_ARRAY(),'machine','strength',460,1),
   ('10000000-0000-4000-8000-000000000047',NULL,'哑铃上举','哑铃上举','dumbbell_overhead_press','Dumbbell Overhead Press','哑铃上举','哑铃上举',
    JSON_ARRAY('shoulder'),JSON_ARRAY('weight','reps'),'shoulder','shoulder',JSON_ARRAY('anterior_deltoid','lateral_deltoid'),JSON_ARRAY('triceps','trapezius'),JSON_ARRAY(),'dumbbell','strength',470,1),
-  ('10000000-0000-4000-8000-000000000048',NULL,'反向蝴蝶机','反向蝴蝶机','reverse_pec_deck','Reverse Pec Deck','反向蝴蝶机','反向蝴蝶机',
+  ('10000000-0000-4000-8000-000000000048',NULL,'反向飞鸟','反向飞鸟','reverse_pec_deck','Reverse Pec Deck','反向飞鸟','反向飞鸟',
    JSON_ARRAY('back'),JSON_ARRAY('weight','reps'),'back','back',JSON_ARRAY('rhomboids','trapezius','posterior_deltoid'),JSON_ARRAY('rotator_cuff'),JSON_ARRAY(),'machine','strength',480,1),
   ('10000000-0000-4000-8000-000000000049',NULL,'绳索Y举','绳索y举','cable_y_raise','Cable Y Raise','绳索Y举','绳索y举',
    JSON_ARRAY('shoulder','back'),JSON_ARRAY('weight','reps'),'shoulder','shoulder',JSON_ARRAY('lateral_deltoid','trapezius'),JSON_ARRAY('anterior_deltoid','rotator_cuff','serratus_anterior'),JSON_ARRAY(),'cable','strength',490,1),

@@ -3,6 +3,7 @@ const{HttpError}=require('../utils/response')
 const{validDate}=require('../utils/bodyTime')
 const{bodyParts,recordMethods}=require('../constants/exerciseMetadata')
 const{total,legacyPlanned}=require('../utils/groupSets')
+const{displayExerciseContent}=require('../utils/exerciseDisplay')
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const metricRanges={weight:[0,1000],reps:[0,10000],duration:[0,1440],distance:[0,1000000],speed:[0,500],incline:[0,100],assistance_weight:[0,1000],rir:[0,10],rpe:[0,10],angle:[0,360],other:[0,1000000]}
 function invalid(message){return new HttpError(400,'VALIDATION_ERROR',message)}
@@ -32,8 +33,8 @@ function validateTemplate(input){
   }).sort((a,b)=>a.sortOrder-b.sortOrder)
   return{name,durationMinutes,exercises}
 }
-function presentTemplate(row){const exercises=readJson(row.content,[]);return{id:row.id,name:row.name,durationMinutes:row.duration_minutes,exercises,actionCount:exercises.length,partCount:new Set(exercises.map(item=>item.bodyPart)).size,version:row.version,sourcePublicationId:row.source_publication_id||null,createdAt:row.created_at,updatedAt:row.updated_at}}
-function presentPublication(row){const exercises=readJson(row.content,[]);return{id:row.id,authorId:row.author_user_id,authorName:row.author_name,authorAvatarUrl:row.author_avatar_url,title:row.title,description:row.description,tags:readJson(row.tags,[]),durationMinutes:row.duration_minutes,exercises,actionCount:exercises.length,partCount:new Set(exercises.map(item=>item.bodyPart)).size,likeCount:Number(row.like_count||0),favoriteCount:Number(row.favorite_count||0),downloadCount:Number(row.download_count||0),liked:Boolean(row.liked),favorited:Boolean(row.favorited),createdAt:row.created_at}}
+function presentTemplate(row){const exercises=displayExerciseContent(readJson(row.content,[]));return{id:row.id,name:row.name,durationMinutes:row.duration_minutes,exercises,actionCount:exercises.length,partCount:new Set(exercises.map(item=>item.bodyPart)).size,version:row.version,sourcePublicationId:row.source_publication_id||null,createdAt:row.created_at,updatedAt:row.updated_at}}
+function presentPublication(row){const exercises=displayExerciseContent(readJson(row.content,[]));return{id:row.id,authorId:row.author_user_id,authorName:row.author_name,authorAvatarUrl:row.author_avatar_url,title:row.title,description:row.description,tags:readJson(row.tags,[]),durationMinutes:row.duration_minutes,exercises,actionCount:exercises.length,partCount:new Set(exercises.map(item=>item.bodyPart)).size,likeCount:Number(row.like_count||0),favoriteCount:Number(row.favorite_count||0),downloadCount:Number(row.download_count||0),liked:Boolean(row.liked),favorited:Boolean(row.favorited),createdAt:row.created_at}}
 
 function createTemplatesService(options={}){
   const repository=options.templatesRepository||require('../repositories/templates')

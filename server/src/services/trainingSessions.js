@@ -2,6 +2,7 @@ const { createHash, randomUUID } = require('node:crypto')
 const { HttpError } = require('../utils/response')
 const { localDate, shiftDate, startOfLocalDate, sqlUtc, readUtc } = require('../utils/bodyTime')
 const { legacyPlanned, legacyActual } = require('../utils/groupSets')
+const { exerciseDisplayName } = require('../utils/exerciseDisplay')
 
 function readJson(value, fallback) {
   if (value === null || value === undefined) return fallback
@@ -32,7 +33,7 @@ function presentExercise(row) {
   }
   return {
     id: row.id, exerciseId: row.exercise_id, variantId: row.exercise_variant_id,
-    exerciseNameSnapshot: row.exercise_name_snapshot,
+    exerciseNameSnapshot: exerciseDisplayName(row.exercise_name_snapshot),
     exerciseVariantNameSnapshot: row.exercise_variant_name_snapshot,
     categorySnapshot: row.category_snapshot,
     muscleGroupSnapshot: row.muscle_group_snapshot,

@@ -215,3 +215,17 @@ history through the API before publishing the frontend. Old rows keep NULL
 `planned_groups`; readers synthesize one planned row with `set_count=sets`,
 while each old actual row is interpreted as one set. The migration does not
 rewrite old plan or immutable history snapshots. Do not rerun after success.
+
+## Fly exercise display names (019)
+
+After verifying a recoverable database backup and applying 018, run 019 once
+before deploying the matching backend and frontend:
+
+    mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p "$DB_NAME" < server/migrations/019_rename_pec_deck_fly.sql
+
+Verify that `machine_chest_fly` displays 正向飞鸟 (chest) and `reverse_pec_deck`
+displays 反向飞鸟 (back), retaining their original IDs and machine equipment.
+Only old catalog-derived personal labels are updated; custom labels and
+immutable completed-session snapshots remain unchanged. API reads adapt old
+history and template snapshots for display. Seed 002 is updated for future
+installs and can still be rerun after the migration.
