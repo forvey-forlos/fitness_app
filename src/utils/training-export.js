@@ -23,7 +23,7 @@ function actualVolume(action) {
     const reps = Number(group?.values?.reps)
     if (!Number.isFinite(weight) || !Number.isFinite(reps)) return sum
     found = true
-    return sum + weight * reps
+    return sum + weight * reps * (Number(group?.set_count) || 1)
   }, 0)
   return found ? Math.round(total * 100) / 100 : null
 }
@@ -52,13 +52,14 @@ function markdownRecord(record, options) {
     lines.push(`### ${index + 1}. ${actionName(action, index, options.actions)}`)
     if (options.plan) {
       const setText = hasValue(action.sets) ? ` · 预计 ${action.sets} 组` : ''
-      lines.push(`- 计划量：${metricSummary(methods, action.targetMetrics || action.target || {})}${setText}`)
+      if (Array.isArray(action.plannedGroups) && action.plannedGroups.length) lines.push(`- 计划量：${action.plannedGroups.map(group => `${group.set_count ?? 1} 组 · ${metricSummary(methods, group.values || {})}`).join('；')}${setText}`)
+      else lines.push(`- 计划量：${metricSummary(methods, action.targetMetrics || action.target || {})}${setText}`)
     }
     if (options.actual) {
       const groups = Array.isArray(action.actualGroups) ? action.actualGroups : []
       if (groups.length) {
         lines.push('- 实际训练量：')
-        groups.forEach((group, groupIndex) => lines.push(`  - 第 ${groupIndex + 1} 组：${metricSummary(methods, group.values || {})}`))
+        groups.forEach((group, groupIndex) => lines.push(`  - 第 ${groupIndex + 1} 组${(group.set_count ?? 1)>1?`（共 ${group.set_count} 组）`:''}：${metricSummary(methods, group.values || {})}`))
         const volume = actualVolume(action)
         if (volume !== null) lines.push(`  - 重量训练总量：${volume} kg`)
       } else {
@@ -82,13 +83,14 @@ function textRecord(record, options) {
     lines.push('', `${index + 1}. ${actionName(action, index, options.actions)}`)
     if (options.plan) {
       const setText = hasValue(action.sets) ? `；预计 ${action.sets} 组` : ''
-      lines.push(`   计划量：${metricSummary(methods, action.targetMetrics || action.target || {})}${setText}`)
+      if (Array.isArray(action.plannedGroups) && action.plannedGroups.length) lines.push(`   计划量：${action.plannedGroups.map(group => `${group.set_count ?? 1} 组；${metricSummary(methods, group.values || {})}`).join('；')}${setText}`)
+      else lines.push(`   计划量：${metricSummary(methods, action.targetMetrics || action.target || {})}${setText}`)
     }
     if (options.actual) {
       const groups = Array.isArray(action.actualGroups) ? action.actualGroups : []
       if (groups.length) {
         lines.push('   实际训练量：')
-        groups.forEach((group, groupIndex) => lines.push(`   第 ${groupIndex + 1} 组：${metricSummary(methods, group.values || {})}`))
+        groups.forEach((group, groupIndex) => lines.push(`   第 ${groupIndex + 1} 组${(group.set_count ?? 1)>1?`（共 ${group.set_count} 组）`:''}：${metricSummary(methods, group.values || {})}`))
         const volume = actualVolume(action)
         if (volume !== null) lines.push(`   重量训练总量：${volume} kg`)
       } else {

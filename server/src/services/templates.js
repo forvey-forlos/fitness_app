@@ -2,6 +2,7 @@ const{randomUUID}=require('node:crypto')
 const{HttpError}=require('../utils/response')
 const{validDate}=require('../utils/bodyTime')
 const{bodyParts,recordMethods}=require('../constants/exerciseMetadata')
+const{total,legacyPlanned}=require('../utils/groupSets')
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const metricRanges={weight:[0,1000],reps:[0,10000],duration:[0,1440],distance:[0,1000000],speed:[0,500],incline:[0,100],assistance_weight:[0,1000],rir:[0,10],rpe:[0,10],angle:[0,360],other:[0,1000000]}
 function invalid(message){return new HttpError(400,'VALIDATION_ERROR',message)}
@@ -15,17 +16,19 @@ function validateTemplate(input){
   if(!Array.isArray(input.exercises)||!input.exercises.length||input.exercises.length>100)throw invalid('模板须包含 1–100 个动作')
   const orders=new Set()
   const exercises=input.exercises.map((item,index)=>{
-    if(!item||typeof item!=='object'||Array.isArray(item)||Object.keys(item).some(key=>!['exerciseId','variantId','bodyPart','recordMethods','targetMetrics','plannedSets','restSeconds','notes','sortOrder','exerciseName','variantName'].includes(key)))throw invalid(`第 ${index+1} 个动作格式不合法`)
+    if(!item||typeof item!=='object'||Array.isArray(item)||Object.keys(item).some(key=>!['exerciseId','variantId','bodyPart','recordMethods','targetMetrics','plannedGroups','plannedSets','restSeconds','notes','sortOrder','exerciseName','variantName'].includes(key)))throw invalid(`第 ${index+1} 个动作格式不合法`)
     const methods=item.recordMethods,targets=item.targetMetrics
     if(!uuid.test(item.exerciseId||'')||item.variantId!==null&&item.variantId!==undefined&&!uuid.test(item.variantId)||!bodyParts.includes(item.bodyPart))throw invalid(`第 ${index+1} 个动作或训练部位不合法`)
     if(!Array.isArray(methods)||!methods.length||methods.length>recordMethods.length||new Set(methods).size!==methods.length||methods.some(method=>!recordMethods.includes(method)))throw invalid(`第 ${index+1} 个动作的记录方式不合法`)
     if(!targets||typeof targets!=='object'||Array.isArray(targets)||Object.keys(targets).length!==methods.length||methods.some(method=>!Object.hasOwn(targets,method)||!validMetric(method,targets[method])))throw invalid(`第 ${index+1} 个动作的预计指标不合法`)
     if(!Number.isInteger(item.plannedSets)||item.plannedSets<1||item.plannedSets>100)throw invalid(`第 ${index+1} 个动作的预计组数须为 1–100`)
+    const plannedGroups=item.plannedGroups??legacyPlanned(null,item.plannedSets,targets)
+    if(!Array.isArray(plannedGroups)||!plannedGroups.length||plannedGroups.length>100||plannedGroups.some(group=>!group||typeof group!=='object'||Array.isArray(group)||Object.keys(group).some(key=>!['set_count','values'].includes(key))||!Number.isInteger(group.set_count)||group.set_count<1||group.set_count>100||!group.values||typeof group.values!=='object'||Array.isArray(group.values)||Object.keys(group.values).length!==methods.length||methods.some(method=>!Object.hasOwn(group.values,method)||!validMetric(method,group.values[method])))||total(plannedGroups)!==item.plannedSets)throw invalid('请核对组数')
     if(!Number.isInteger(item.sortOrder)||item.sortOrder<1||item.sortOrder>1000||orders.has(item.sortOrder))throw invalid('动作排序不合法')
     orders.add(item.sortOrder)
     if(item.restSeconds!==null&&item.restSeconds!==undefined&&(!Number.isInteger(item.restSeconds)||item.restSeconds<0||item.restSeconds>3600))throw invalid('休息时间不合法')
     const notes=item.notes===null||item.notes===undefined?null:cleanText(item.notes,1000)
-    return{exerciseId:item.exerciseId,variantId:item.variantId||null,bodyPart:item.bodyPart,recordMethods:[...methods],targetMetrics:{...targets},plannedSets:item.plannedSets,restSeconds:item.restSeconds??null,notes,sortOrder:item.sortOrder,exerciseName:typeof item.exerciseName==='string'?cleanText(item.exerciseName,100,true):'',variantName:typeof item.variantName==='string'?cleanText(item.variantName,100):''}
+    return{exerciseId:item.exerciseId,variantId:item.variantId||null,bodyPart:item.bodyPart,recordMethods:[...methods],targetMetrics:{...targets},plannedGroups:plannedGroups.map(group=>({set_count:group.set_count,values:{...group.values}})),plannedSets:item.plannedSets,restSeconds:item.restSeconds??null,notes,sortOrder:item.sortOrder,exerciseName:typeof item.exerciseName==='string'?cleanText(item.exerciseName,100,true):'',variantName:typeof item.variantName==='string'?cleanText(item.variantName,100):''}
   }).sort((a,b)=>a.sortOrder-b.sortOrder)
   return{name,durationMinutes,exercises}
 }
@@ -47,7 +50,8 @@ function createTemplatesService(options={}){
       if(!row||!row.is_system)throw new HttpError(422,'EXERCISE_UNAVAILABLE','模板包含已失效或非系统动作，请先修改模板')
       const variant=item.variantId?await catalog.findVariant(item.exerciseId,item.variantId):null
       if(item.variantId&&!variant)throw new HttpError(422,'EXERCISE_VARIANT_UNAVAILABLE','模板包含已失效的动作变式')
-      snapshots.set(item.sortOrder,{exerciseName:row.default_display_name_zh||row.name,variantName:variant?.default_display_name_zh||''})
+      const allowed=readJson(row.body_parts,[row.category]).map(part=>part==='abs'?'core':part)
+      snapshots.set(item.sortOrder,{exerciseName:row.default_display_name_zh||row.name,variantName:variant?.default_display_name_zh||'',bodyPart:allowed.includes(item.bodyPart)?item.bodyPart:allowed[0]||row.category})
     }
     return snapshots
   }
@@ -60,12 +64,12 @@ function createTemplatesService(options={}){
     async remove(userId,id){await active(userId);if(!await repository.remove(userId,id))throw new HttpError(404,'NOT_FOUND','模板不存在');return{id,deleted:true}},
     async createPlan(userId,id,{planDate,idempotencyKey}={}){
       await active(userId);if(!validDate(planDate))throw invalid('训练日期不合法')
-      const data=contentOf(await own(userId,id));await verifyExercises(userId,data.exercises)
-      const result=await plans.create(userId,{planDate,name:data.name,durationMinutes:data.durationMinutes,idempotencyKey:idempotencyKey||null,exercises:data.exercises.map(item=>({exerciseId:item.exerciseId,variantId:item.variantId,bodyPart:item.bodyPart,recordMethods:item.recordMethods,targetMetrics:item.targetMetrics,sets:item.plannedSets,reps:item.targetMetrics.reps??null,weight:item.targetMetrics.weight??null,actualGroups:Array.from({length:item.plannedSets},()=>({values:Object.fromEntries(item.recordMethods.map(method=>[method,null]))})),actual:{kg:null,reps:null,sets:null},restSeconds:item.restSeconds,notes:item.notes,sortOrder:item.sortOrder}))})
+      const data=contentOf(await own(userId,id));const names=await verifyExercises(userId,data.exercises);data.exercises=data.exercises.map(item=>({...item,...names.get(item.sortOrder)}))
+      const result=await plans.create(userId,{planDate,name:data.name,durationMinutes:data.durationMinutes,idempotencyKey:idempotencyKey||null,exercises:data.exercises.map(item=>({exerciseId:item.exerciseId,variantId:item.variantId,bodyPart:item.bodyPart,recordMethods:item.recordMethods,targetMetrics:item.targetMetrics,plannedGroups:item.plannedGroups,sets:item.plannedSets,reps:item.targetMetrics.reps??null,weight:item.targetMetrics.weight??null,actualGroups:[{set_count:1,values:Object.fromEntries(item.recordMethods.map(method=>[method,null]))}],actual:{kg:null,reps:null,sets:null},restSeconds:item.restSeconds,notes:item.notes,sortOrder:item.sortOrder}))})
       return result
     },
     async publish(userId,id,input){
-      await active(userId);const data=contentOf(await own(userId,id));await verifyExercises(userId,data.exercises)
+      await active(userId);const data=contentOf(await own(userId,id));const names=await verifyExercises(userId,data.exercises);data.exercises=data.exercises.map(item=>({...item,...names.get(item.sortOrder)}))
       if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(key=>!['description','tags'].includes(key)))throw invalid('发布资料不合法')
       const description=cleanText(input.description??'',400),tags=input.tags??[]
       if(!Array.isArray(tags)||tags.length>5||new Set(tags).size!==tags.length)throw invalid('最多选择 5 个不重复标签')
@@ -78,7 +82,7 @@ function createTemplatesService(options={}){
     async removePublication(userId,id){await active(userId);if(!await repository.removePublication(userId,id))throw new HttpError(404,'NOT_FOUND','帖子不存在或不属于你');return{id,deleted:true}},
     async setReaction(userId,id,kind,enabled){await active(userId);if(typeof enabled!=='boolean'||!['like','favorite'].includes(kind))throw invalid('互动参数不合法');if(!await repository.setReaction(userId,id,kind,enabled))throw new HttpError(404,'NOT_FOUND','帖子不存在');return presentPublication(await publication(userId,id))},
     async importPublic(userId,id){
-      await active(userId);const post=await publication(userId,id);const data=contentOf(post);await verifyExercises(userId,data.exercises)
+      await active(userId);const post=await publication(userId,id);const data=contentOf(post);const names=await verifyExercises(userId,data.exercises);data.exercises=data.exercises.map(item=>({...item,...names.get(item.sortOrder)}))
       const templateId=randomUUID();if(!await repository.importPublication(userId,id,{id:templateId,name:data.name,durationMinutes:data.durationMinutes,exercises:data.exercises}))throw new HttpError(404,'NOT_FOUND','帖子已删除')
       return presentTemplate(await own(userId,templateId))
     }

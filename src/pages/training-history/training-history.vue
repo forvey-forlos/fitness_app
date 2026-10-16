@@ -120,7 +120,7 @@ function formatSnapshot(action){
   if(Array.isArray(action.recordMethods)&&action.recordMethods.length&&Array.isArray(action.actualGroups)&&action.actualGroups.length){
     const latest=action.actualGroups[action.actualGroups.length-1]?.values||{}
     const summary=action.recordMethods.map(method=>`${recordMethodName(method)} ${latest[method]??'--'}`).join(' / ')
-    return `${action.actualGroups.length} 组 · ${summary}`
+    return `${action.actualGroups.reduce((sum,group)=>sum+(Number(group.set_count)||1),0)} 组 · ${summary}`
   }
   const target=action.target||{kg:action.weight,reps:action.reps,sets:action.sets}
   const actual=action.actual||{}

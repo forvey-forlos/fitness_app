@@ -14,7 +14,7 @@ const post={id:publicationId,author_user_id:userId,title:input.name,duration_min
 function service(overrides={}){
   const calls=[]
   const templatesRepository={findMine:async()=>row,findPublic:async()=>post,importPublication:async(...args)=>{calls.push(['import',...args]);return true},...overrides}
-  const result=createTemplatesService({templatesRepository,usersRepository:{findActiveById:async()=>({id:userId})},exercisesRepository:{findVisibleById:async()=>({id:exerciseId,is_system:1,name:'卧推'}),findVariant:async()=>null},trainingPlansService:{create:async(...args)=>{calls.push(['plan',...args]);return{plan:{id:'plan-id'},created:true}}}})
+  const result=createTemplatesService({templatesRepository,usersRepository:{findActiveById:async()=>({id:userId})},exercisesRepository:{findVisibleById:async()=>({id:exerciseId,is_system:1,name:'卧推',body_parts:['chest'],category:'chest'}),findVariant:async()=>null},trainingPlansService:{create:async(...args)=>{calls.push(['plan',...args]);return{plan:{id:'plan-id'},created:true}}}})
   return{result,calls}
 }
 test('template validator requires an independent complete exercise snapshot',()=>{
@@ -28,7 +28,9 @@ test('creating a plan uses template targets and blank actual groups',async()=>{
   const plan=calls[0][2]
   assert.equal(plan.exercises[0].sets,3)
   assert.deepEqual(plan.exercises[0].targetMetrics,{weight:30,reps:10})
-  assert.equal(plan.exercises[0].actualGroups.length,3)
+  assert.equal(plan.exercises[0].actualGroups.length,1)
+  assert.equal(plan.exercises[0].actualGroups[0].set_count,1)
+  assert.equal(plan.exercises[0].plannedGroups[0].set_count,3)
   assert.deepEqual(plan.exercises[0].actualGroups[0].values,{weight:null,reps:null})
 })
 test('import creates a private copy without a reference to mutable publication content',async()=>{

@@ -27,11 +27,11 @@
         <view class="streak"><text class="streak-icon">↗</text><view><text class="streak-value">{{ currentStreak }}</text><text class="streak-label">连续打卡</text></view></view>
       </view>
       <view v-if="homeLoading" class="card-footer" @tap.stop><text>首页数据加载中…</text></view>
-      <view v-else-if="homeError" class="card-footer" @tap.stop><text>{{ homeError }}</text><text class="text-action" @tap="loadHomeSummary">重试 →</text></view>
+      <view v-else-if="homeError" class="card-footer" @tap.stop><text>{{ homeError }}</text><view class="text-action nav-action" @tap="loadHomeSummary"><text>重试</text><UiChevron /></view></view>
 
       <view class="dashboard">
-        <view class="module body-card" @tap.stop>
-          <view class="module-head"><view><text class="module-kicker">OVERVIEW</text><text class="module-title">身体数据</text></view><button class="icon-button" hover-class="pressed" @tap="editBodyData">＋</button></view>
+        <view class="module body-card" @tap.stop="editBodyData">
+          <view class="module-head"><view><text class="module-kicker">OVERVIEW</text><text class="module-title">身体数据</text></view></view>
           <view class="body-main">
             <view class="score-ring"><view class="score-inner"><text class="score">{{ bmiValue }}</text><text class="unit">BMI</text></view></view>
             <view class="metrics">
@@ -50,18 +50,18 @@
               </view>
             </view>
           </view>
-          <view class="card-footer"><text>最近记录：{{ latestRecordText }}</text><text class="text-action" @tap="editBodyData">管理数据 →</text></view>
+          <view class="card-footer"><text>最近记录：{{ latestRecordText }}</text><view class="text-action nav-action" @tap.stop="editBodyData"><text>管理数据</text><UiChevron /></view></view>
         </view>
 
         <view class="module plan-card" @tap.stop>
-          <view class="module-head"><view><text class="module-kicker">TODAY</text><text class="module-title">训练计划</text></view><view class="day-tag">{{ todayWeekday }}</view></view>
+          <view class="module-head"><view><text class="module-kicker">TODAY</text><text class="module-title">训练计划</text></view></view>
           <view class="today-plan" hover-class="plan-pressed" @tap="openTrainingPlan">
             <view class="plan-focus">
-              <view class="plan-icon"><text>⌁</text></view>
+              <view class="plan-icon"><UiSymbol kind="dumbbell" /></view>
               <view class="plan-copy"><text class="plan-name">{{ todayPlan?.name || '今天暂无训练计划' }}</text><text class="plan-meta">{{ todayPlan ? `${todayPlanActionCount} 个动作 · 预计 ${todayPlanDuration} 分钟` : '点击创建今天的训练安排' }}</text></view>
-              <text class="plan-arrow">›</text>
+              <UiChevron v-if="todayPlan" class="plan-arrow" />
             </view>
-            <view class="plan-status"><text>{{ todayCompleted ? '今日训练已完成' : todayPlan ? '今天的安排已经准备好' : '可以去创建今日计划' }}</text><text>{{ todayCompleted ? '查看计划' : todayPlan ? '开始训练' : '创建计划' }} →</text></view>
+            <view class="plan-status"><text>{{ todayCompleted ? '今日训练已完成' : todayPlan ? '今天的安排已经准备好' : '可以去创建今日计划' }}</text><view class="nav-action"><text>{{ todayCompleted ? '查看计划' : todayPlan ? '开始训练' : '创建计划' }}</text><UiChevron /></view></view>
           </view>
           <view class="week-completion" hover-class="plan-pressed" @tap="openTrainingHistory">
             <view class="completion-head"><view><text class="completion-title">训练完成点状图</text><text class="completion-caption">{{ weekRangeText }}</text></view><text class="completion-count">{{ weekCompletedCount }}/7</text></view>
@@ -70,17 +70,17 @@
                 <view class="completion-dot" :class="{ done:day.done }"><text v-if="day.done">✓</text></view><text>{{ day.label }}</text>
               </view>
             </view>
-            <view class="history-link"><text>点击查看训练历史</text><text>›</text></view>
+            <view class="history-link"><text>点击查看训练历史</text><UiChevron /></view>
           </view>
         </view>
 
-        <view class="module action-card" @tap.stop>
-          <view class="module-head"><view><text class="module-kicker">LIBRARY</text><text class="module-title">动作管理</text></view><button class="icon-button" hover-class="pressed" @tap="addAction">＋</button></view>
+        <view class="module action-card" @tap.stop="openLibrary">
+          <view class="module-head"><view><text class="module-kicker">LIBRARY</text><text class="module-title">动作管理</text></view></view>
           <view class="library-count"><text class="big-number">{{ actionTotal }}</text><view><text class="count-label">个人动作</text><text class="count-note">覆盖 {{ actionPartCount }} 个训练部位 · 系统目录 {{ systemActionCount }} 个</text></view></view>
           <view class="body-parts">
-            <view v-for="part in bodyParts" :key="part.name" class="part" @tap="openPart(part.name)"><view class="part-icon">{{ part.icon }}</view><view class="part-copy"><text>{{ part.name }}</text><text>{{ part.count }} 个动作</text></view><text class="arrow">›</text></view>
+            <view v-for="part in bodyParts" :key="part.name" class="part" @tap.stop="openLibrary"><view class="part-icon">{{ part.icon }}</view><view class="part-copy"><text>{{ part.name }}</text><text>{{ part.count }} 个动作</text></view><UiChevron class="arrow" /></view>
           </view>
-          <button class="secondary-button" hover-class="pressed" @tap="openLibrary">管理动作库</button>
+          <button class="secondary-button" hover-class="pressed" @tap.stop="openLibrary">管理动作库</button>
         </view>
       </view>
     </view>
@@ -92,6 +92,8 @@ import { computed, nextTick,ref, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { ACCESS_TOKEN_KEY } from '../../api/auth'
 import { getHomeSummary } from '../../api/home'
+import UiChevron from '../../components/UiChevron.vue'
+import UiSymbol from '../../components/UiSymbol.vue'
 
 const THEME_STORAGE_KEY = 'fit_note_theme_index'
 const themes = [
@@ -140,7 +142,6 @@ watch(()=>homeUser.value?.avatarUrl,()=>{avatarImageFailed.value=false})
 const userTimezone=computed(()=>homeUser.value?.timezone||'Asia/Shanghai')
 function zonedDateText(options){try{return new Intl.DateTimeFormat('zh-CN',{timeZone:userTimezone.value,...options}).format(new Date())}catch(_){return new Date().toLocaleDateString('zh-CN',options)}}
 const todayText=computed(()=>zonedDateText({month:'long',day:'numeric',weekday:'long'}))
-const todayWeekday=computed(()=>zonedDateText({weekday:'short'}))
 function todayDateKey(){try{const parts=new Intl.DateTimeFormat('en-US',{timeZone:userTimezone.value,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());const field=(type)=>parts.find(part=>part.type===type)?.value;return [field('year'),field('month'),field('day')].join('-')}catch(_){return localDateKey(new Date())}}
 const currentStreak=computed(()=>Number(homeSummary.value?.weekTraining?.currentStreak||0))
 const todayPlan=computed(()=>homeSummary.value?.todayPlan||null)
@@ -183,13 +184,10 @@ function switchTheme(){
   setTimeout(()=>{themeIndex.value=next;themeChanging.value=false},820)
 }
 function syncTheme(){ const value=Number(uni.getStorageSync(THEME_STORAGE_KEY)); if(Number.isInteger(value)&&value>=0&&value<themes.length){themeIndex.value=value;uiThemeIndex.value=value;pendingTheme.value=themes[value];themeChanging.value=false;nextTick(drawWeightChart)} }
-function notice(title){ uni.showToast({title,icon:'none'}) }
 function showProfile(){uni.navigateTo({url:'/pages/profile/profile'})}
 function editBodyData(){uni.navigateTo({url:'/pages/body-data/body-data'})}
 function openTrainingPlan(){uni.navigateTo({url:'/pages/training-plan/training-plan'})}
 function openTrainingHistory(){uni.navigateTo({url:'/pages/training-history/training-history'})}
-function addAction(){uni.navigateTo({url:'/pages/action-management/action-management'})}
-function openPart(name){notice(`${name}动作列表将在后续开放`)}
 function openLibrary(){uni.navigateTo({url:'/pages/action-management/action-management'})}
 watch([trendSeries,themeIndex],()=>nextTick(drawWeightChart),{deep:true})
 async function loadHomeSummary() {
@@ -236,4 +234,6 @@ page{background:#f4f4fa}.page{position:relative;min-height:100vh;overflow:hidden
 .welcome{margin-top:28rpx;margin-bottom:28rpx}
 /* #endif */
 @media(max-width:420px){.welcome{align-items:flex-start;gap:14rpx}.streak{padding:14rpx 16rpx}.streak-icon{font-size:27rpx}.streak-value{font-size:25rpx}.streak-label{font-size:16rpx}}
+.nav-action{display:inline-flex;align-items:center;gap:10rpx;color:var(--accent);white-space:nowrap}.body-card,.action-card{cursor:pointer}.history-link{justify-content:flex-end;align-items:center;gap:10rpx}.plan-status .nav-action{font-weight:650}.plan-focus>.plan-arrow{margin-right:5rpx}.plan-icon{overflow:hidden}
+@media(min-width:900px){.plan-icon :deep(.symbol){transform:scale(.62)}}
 </style>

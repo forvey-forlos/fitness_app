@@ -1,5 +1,6 @@
 const { createHash, randomUUID } = require('node:crypto')
 const { HttpError } = require('../utils/response')
+const { legacyPlanned, legacyActual } = require('../utils/groupSets')
 
 const partNames = {
   shoulder: ['肩部', '肩'], chest: ['胸部', '胸'],
@@ -40,7 +41,8 @@ function presentItem(row) {
     bodyPart: row.body_part || row.exercise_category,
     recordMethods: readJson(row.record_methods, readJson(row.exercise_record_methods, ['weight', 'reps'])),
     targetMetrics: readJson(row.target_metrics, { weight: row.weight === null ? null : Number(row.weight), reps: row.reps }),
-    actualGroups: readJson(row.actual_groups, []),
+    plannedGroups: legacyPlanned(row.planned_groups, row.sets, row.target_metrics),
+    actualGroups: legacyActual(row.actual_groups),
     sets: row.sets, reps: row.reps,
     weight: row.weight === null ? null : Number(row.weight),
     actual, restSeconds: row.rest_seconds, notes: row.notes,
@@ -69,6 +71,12 @@ function generatedName(items, exercisesById) {
   if (categories.length === 0) return '今日训练'
   if (categories.length === 1) return (partNames[categories[0]] || partNames.other)[0] + '训练'
   return categories.map((category) => (partNames[category] || partNames.other)[1]).join('') + '训练'
+}
+function catalogPart(item, exercise) {
+  if (!item.bodyPart) return exercise.category === 'abs' ? 'abs' : (readJson(exercise.body_parts, [exercise.category])[0] || exercise.category)
+  const allowed = readJson(exercise.body_parts, [exercise.category || item.bodyPart]).map(part => part === 'abs' ? 'core' : part)
+  if (item.bodyPart === 'abs' && allowed.includes('core')) return 'abs'
+  return allowed.includes(item.bodyPart) ? item.bodyPart : (allowed[0] || item.bodyPart)
 }
 
 function createTrainingPlansService(options = {}) {
@@ -139,13 +147,14 @@ function createTrainingPlansService(options = {}) {
         }
       }
       const byId = await requireExercises(userId, sorted)
+      const normalized = sorted.map(item => ({ ...item, bodyPart: catalogPart(item, byId.get(item.exerciseId)) }))
       const record = {
         id: randomUUID(), userId, planDate: input.planDate,
-        name: input.name || generatedName(sorted, byId),
+        name: input.name || generatedName(normalized, byId),
         durationMinutes: input.durationMinutes ?? Math.max(20, sorted.length * 8),
         idempotencyKey: input.idempotencyKey, requestHash
       }
-      const items = sorted.map((item) => ({ ...item, id: randomUUID() }))
+      const items = normalized.map((item) => ({ ...item, id: randomUUID() }))
       try {
         await repository.create(record, items)
       } catch (error) {
@@ -178,12 +187,13 @@ function createTrainingPlansService(options = {}) {
       }
       const sorted = [...input.exercises].sort((a, b) => a.sortOrder - b.sortOrder)
       const byId = await requireExercises(userId, sorted)
+      const normalized = sorted.map(item => ({ ...item, bodyPart: catalogPart(item, byId.get(item.exerciseId)) }))
       const record = {
         planDate: input.planDate,
-        name: input.name || generatedName(sorted, byId),
+        name: input.name || generatedName(normalized, byId),
         durationMinutes: input.durationMinutes ?? Math.max(20, sorted.length * 8)
       }
-      const items = sorted.map((item) => ({ ...item, id: randomUUID() }))
+      const items = normalized.map((item) => ({ ...item, id: randomUUID() }))
       try {
         if (!await repository.update(userId, id, input.version, record, items)) {
           throw new HttpError(409, 'PLAN_VERSION_CONFLICT', '训练计划版本冲突，请重新获取')

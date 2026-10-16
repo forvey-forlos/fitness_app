@@ -9,7 +9,7 @@ const planColumns = [
 const itemColumns = [
   'pe.id, pe.exercise_id, pe.exercise_variant_id, pe.sort_order, pe.sets, pe.reps, pe.weight,',
   'pe.actual_sets, pe.actual_reps, pe.actual_weight, pe.body_part,',
-  'pe.record_methods, pe.target_metrics, pe.actual_groups,',
+  'pe.record_methods, pe.target_metrics, pe.planned_groups, pe.actual_groups,',
   'pe.rest_seconds, pe.notes,',
   "DATE_FORMAT(pe.created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS created_at,",
   "DATE_FORMAT(pe.updated_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS updated_at,",
@@ -55,14 +55,15 @@ function createTrainingPlansRepository(pool) {
       const [result] = await connection.execute(
         ['INSERT INTO training_plan_exercises',
           '(id, training_plan_id, exercise_id, exercise_variant_id, sort_order, sets, reps, weight,',
-          'actual_sets, actual_reps, actual_weight, body_part, record_methods, target_metrics, actual_groups, rest_seconds, notes, created_at, updated_at)',
-          'SELECT ?, p.id, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3)',
+          'actual_sets, actual_reps, actual_weight, body_part, record_methods, target_metrics, planned_groups, actual_groups, rest_seconds, notes, created_at, updated_at)',
+          'SELECT ?, p.id, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3)',
           'FROM training_plans p WHERE p.id = ? AND p.user_id = ?',
           'AND p.status = ? AND p.deleted_at IS NULL'].join(' '),
         [item.id, item.exerciseId, item.variantId, item.sortOrder, item.sets, item.reps,
           item.weight, actual.sets, actual.reps, actual.kg, item.bodyPart,
           item.recordMethods ? JSON.stringify(item.recordMethods) : null,
           item.targetMetrics ? JSON.stringify(item.targetMetrics) : null,
+          item.plannedGroups ? JSON.stringify(item.plannedGroups) : null,
           item.actualGroups ? JSON.stringify(item.actualGroups) : null,
           item.restSeconds, item.notes, planId, userId, 'draft']
       )

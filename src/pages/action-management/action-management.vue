@@ -144,7 +144,7 @@ function changePartFilter(event){filters.part=partFilterOptions.value[Number(eve
 function changeMuscleFilter(event){filters.muscle=muscleFilterOptions.value[Number(event.detail.value)]?.key||'';keepValidFilters()}
 function changeEquipmentFilter(event){filters.equipment=equipmentFilterOptions.value[Number(event.detail.value)]?.key||'';keepValidFilters()}
 function resetFilters(){keyword.value='';Object.assign(filters,{part:'',muscle:'',equipment:''})}
-function actionDescription(action){const parts=action.bodyParts.slice(0,2).map(bodyPartName).join(' / '),muscles=action.primaryMuscles.slice(0,2).map(muscleName).join('、');return[parts,muscles,equipmentName(action.equipment)].filter(Boolean).join(' · ')}
+function actionDescription(action){const parts=action.bodyParts.slice(0,2).map(bodyPartName).join(' / '),muscles=action.id==='10000000-0000-4000-8000-000000000048'&&action.muscleGroup==='back'?'背部肌群':action.primaryMuscles.slice(0,2).map(muscleName).join('、');return[parts,muscles,equipmentName(action.equipment)].filter(Boolean).join(' · ')}
 function showError(error,fallback='请求失败'){loadError.value=error?.message||fallback;uni.showToast({title:error?.code==='EXERCISE_ALREADY_EXISTS'?'已存在同名动作':loadError.value,icon:'none'})}
 async function loadExercises(){
   if(loading.value)return

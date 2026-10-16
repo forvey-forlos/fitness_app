@@ -1,6 +1,7 @@
 const { createHash, randomUUID } = require('node:crypto')
 const { HttpError } = require('../utils/response')
 const { localDate, shiftDate, startOfLocalDate, sqlUtc, readUtc } = require('../utils/bodyTime')
+const { legacyPlanned, legacyActual } = require('../utils/groupSets')
 
 function readJson(value, fallback) {
   if (value === null || value === undefined) return fallback
@@ -43,7 +44,8 @@ function presentExercise(row) {
     bodyPart: row.body_part_snapshot || row.category_snapshot,
     recordMethods: readJson(row.record_methods, ['weight', 'reps']),
     targetMetrics: readJson(row.target_metrics, { weight: target.kg, reps: target.reps }),
-    actualGroups: readJson(row.actual_groups, []),
+    plannedGroups: legacyPlanned(row.planned_groups, row.sets, row.target_metrics || { weight: target.kg, reps: target.reps }),
+    actualGroups: legacyActual(row.actual_groups),
     restSeconds: row.rest_seconds, notes: row.notes
   }
 }
@@ -169,7 +171,7 @@ function createTrainingSessionsService(options = {}) {
               actual_reps: actual.reps, actual_weight: actual.kg,
               record_methods: completed.recordMethods || readJson(item.record_methods, null),
               actual_groups: completed.actualGroups || readJson(item.actual_groups, null),
-              target_metrics: readJson(item.target_metrics, null) }
+              target_metrics: readJson(item.target_metrics, null), planned_groups: readJson(item.planned_groups, null) }
           })
           const planSnapshot = { ...plan }
           await tx.insertSession({

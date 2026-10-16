@@ -200,3 +200,18 @@ transaction also restores/adds all referenced system exercises in the user's
 personal action library. Deleting a publication removes its interactions but
 does not remove anyone's imported template. Training session snapshots remain
 independent of all template changes.
+
+## Planned training groups (018)
+
+Before running 018, make and verify a recoverable full database backup. Run
+the migration once, before deploying backend code that reads `planned_groups`:
+
+    mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p "$DB_NAME" < server/migrations/018_add_planned_training_groups.sql
+
+Check both new columns with `SHOW COLUMNS FROM training_plan_exercises LIKE
+'planned_groups'` and `SHOW COLUMNS FROM training_session_exercises LIKE
+'planned_groups'`. Verify a sample of old plans, templates and completed
+history through the API before publishing the frontend. Old rows keep NULL
+`planned_groups`; readers synthesize one planned row with `set_count=sets`,
+while each old actual row is interpreted as one set. The migration does not
+rewrite old plan or immutable history snapshots. Do not rerun after success.

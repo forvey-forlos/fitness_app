@@ -94,11 +94,13 @@ function validateComplete(req, res, next) {
         if (!Array.isArray(methods) || !methods.length || methods.length > recordMethods.length || new Set(methods).size !== methods.length || methods.some((method) => !recordMethods.includes(method))) {
           errors.push({ field: `${field}.recordMethods`, message: '记录方式不合法' })
         } else if (!Array.isArray(item.actualGroups) || !item.actualGroups.length || item.actualGroups.length > 100 || item.actualGroups.some((group) => {
-          if (!group || typeof group !== 'object' || Array.isArray(group) || Object.keys(group).some((key) => key !== 'values')) return true
+          if (!group || typeof group !== 'object' || Array.isArray(group) || Object.keys(group).some((key) => !['values','set_count'].includes(key))) return true
+          if (group.set_count !== undefined && (!Number.isInteger(group.set_count) || group.set_count < 1 || group.set_count > 100)) return true
           const values = group.values
           if (!values || typeof values !== 'object' || Array.isArray(values) || Object.keys(values).length !== methods.length) return true
           return methods.some((method) => !Object.hasOwn(values, method) || !validMetric(method, values[method]))
         })) errors.push({ field: `${field}.actualGroups`, message: '每组必须完整填写所选记录方式' })
+        else if (item.actualGroups.reduce((sum, group) => sum + (group.set_count ?? 1), 0) !== actual.sets) errors.push({ field: `${field}.actual.sets`, message: '实际组数与分组不一致' })
       }
     })
   }

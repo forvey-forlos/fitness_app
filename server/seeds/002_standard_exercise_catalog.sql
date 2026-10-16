@@ -86,8 +86,8 @@ VALUES
    JSON_ARRAY('back'),JSON_ARRAY('assistance_weight','reps'),'back','back',JSON_ARRAY('latissimus_dorsi'),JSON_ARRAY('teres_major','rhomboids','trapezius','biceps'),JSON_ARRAY(),'machine','strength',460,1),
   ('10000000-0000-4000-8000-000000000047',NULL,'哑铃上举','哑铃上举','dumbbell_overhead_press','Dumbbell Overhead Press','哑铃上举','哑铃上举',
    JSON_ARRAY('shoulder'),JSON_ARRAY('weight','reps'),'shoulder','shoulder',JSON_ARRAY('anterior_deltoid','lateral_deltoid'),JSON_ARRAY('triceps','trapezius'),JSON_ARRAY(),'dumbbell','strength',470,1),
-  ('10000000-0000-4000-8000-000000000048',NULL,'反向蝴蝶机','反向蝴蝶机','reverse_butterfly_leg_machine','Reverse Butterfly Leg Machine','反向蝴蝶机','反向蝴蝶机',
-   JSON_ARRAY('legs','glutes'),JSON_ARRAY('weight','reps'),'legs','legs',JSON_ARRAY('quadriceps','gluteus_maximus'),JSON_ARRAY('hamstrings','adductors'),JSON_ARRAY(),'machine','strength',480,1),
+  ('10000000-0000-4000-8000-000000000048',NULL,'反向蝴蝶机','反向蝴蝶机','reverse_pec_deck','Reverse Pec Deck','反向蝴蝶机','反向蝴蝶机',
+   JSON_ARRAY('back'),JSON_ARRAY('weight','reps'),'back','back',JSON_ARRAY('rhomboids','trapezius','posterior_deltoid'),JSON_ARRAY('rotator_cuff'),JSON_ARRAY(),'machine','strength',480,1),
   ('10000000-0000-4000-8000-000000000049',NULL,'绳索Y举','绳索y举','cable_y_raise','Cable Y Raise','绳索Y举','绳索y举',
    JSON_ARRAY('shoulder','back'),JSON_ARRAY('weight','reps'),'shoulder','shoulder',JSON_ARRAY('lateral_deltoid','trapezius'),JSON_ARRAY('anterior_deltoid','rotator_cuff','serratus_anterior'),JSON_ARRAY(),'cable','strength',490,1),
   ('10000000-0000-4000-8000-000000000050',NULL,'坐姿腿弯举','坐姿腿弯举','seated_leg_curl','Seated Leg Curl','坐姿腿弯举','坐姿腿弯举',
@@ -96,8 +96,13 @@ ON DUPLICATE KEY UPDATE
   standard_name_en=VALUES(standard_name_en), default_display_name_zh=VALUES(default_display_name_zh),
   catalog_key=VALUES(catalog_key),
   default_display_name_normalized=VALUES(default_display_name_normalized), body_parts=VALUES(body_parts),
-  record_methods=VALUES(record_methods), primary_muscles=VALUES(primary_muscles), secondary_muscles=VALUES(secondary_muscles),
+  record_methods=VALUES(record_methods), category=VALUES(category), muscle_group=VALUES(muscle_group),
+  primary_muscles=VALUES(primary_muscles), secondary_muscles=VALUES(secondary_muscles),
   equipment=VALUES(equipment), movement_type=VALUES(movement_type), sort_order=VALUES(sort_order), is_system=1, deleted_at=NULL;
+
+-- Remove only the two aliases that encoded the old, incorrect leg-machine meaning.
+DELETE FROM exercise_aliases WHERE exercise_id='10000000-0000-4000-8000-000000000048'
+  AND alias_normalized IN ('反向蝴蝶机（练腿）','reverse butterfly leg machine');
 
 INSERT INTO exercise_aliases (id, exercise_id, alias, alias_normalized, locale)
 SELECT UUID(), e.id, a.alias, a.alias_normalized, a.locale
@@ -120,8 +125,8 @@ JOIN (
   SELECT 'seated_leg_press','坐姿腿举','坐姿腿举','zh-CN' UNION ALL SELECT 'seated_leg_press','Leg Press','leg press','en' UNION ALL
   SELECT 'machine_chest_fly','蝴蝶机夹胸','蝴蝶机夹胸','zh-CN' UNION ALL
   SELECT 'machine_chest_fly','夹胸机','夹胸机','zh-CN' UNION ALL SELECT 'machine_chest_fly','Machine Chest Fly','machine chest fly','en' UNION ALL
-  SELECT 'reverse_butterfly_leg_machine','反向蝴蝶机（练腿）','反向蝴蝶机（练腿）','zh-CN' UNION ALL
-  SELECT 'reverse_butterfly_leg_machine','Reverse Butterfly Leg Machine','reverse butterfly leg machine','en' UNION ALL
+  SELECT 'reverse_pec_deck','反向飞鸟','反向飞鸟','zh-CN' UNION ALL
+  SELECT 'reverse_pec_deck','Reverse Pec Deck','reverse pec deck','en' UNION ALL
   SELECT 'cable_y_raise','绳索Y字举','绳索y字举','zh-CN' UNION ALL SELECT 'cable_y_raise','Cable Y Raise','cable y raise','en' UNION ALL
   SELECT 'cable_face_pull','面拉','面拉','zh-CN' UNION ALL SELECT 'cable_face_pull','Cable Face Pull','cable face pull','en' UNION ALL
   SELECT 'seated_leg_curl','坐式腿弯举','坐式腿弯举','zh-CN' UNION ALL

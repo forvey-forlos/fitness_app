@@ -25,7 +25,7 @@
             <text v-else class="part-empty-tip">请在下方为该部位添加具体动作</text>
           </view>
         </view>
-        <view v-else class="hero-empty"><view>＋</view><text>点击“新建计划”开始安排训练</text></view>
+        <view v-else class="hero-empty"><text>点击“新建计划”开始安排训练</text></view>
       </view>
 
       <view v-if="contentVisible" :key="contentRevealKey" class="content" :class="{'content-emerging':contentEmerging,'content-floating':contentFloating}">
@@ -54,15 +54,20 @@
                   <picker v-if="action.variants.length" :range="action.variants" range-key="name" @change="selectVariant(action,$event)"><view class="method-caption"><text>动作变式：{{ action.variant?.name||'默认' }}</text><text>选择 ›</text></view></picker>
                   <view class="method-caption" @tap="editRecordMethods(action)"><text>记录方式：{{ action.recordMethods.map(recordMethodLabel).join('、') }}</text><text>{{ todayCompleted?'已锁定':'调整 ›' }}</text></view>
                   <view class="planned-sets"><text>预计组数</text><input v-model="action.plannedSets" type="number" :disabled="todayCompleted" maxlength="3"/><text>组</text></view>
-                  <view class="metric-row target-row" :style="metricGridStyle(action)">
+                  <view v-for="(group,groupIndex) in action.plannedGroups" :key="group.id" class="metric-row target-row" :class="{'group-flash':group.flash}" :style="metricGridStyle(action)" @tap.self="incrementGroup(group)">
                     <text class="row-label">计划</text>
-                    <label v-for="method in action.recordMethods" :key="'target-'+method"><text>{{ recordMethodLabel(method) }}</text><input v-model="action.targetMetrics[method]" :disabled="todayCompleted" :type="metricInputType(method)" maxlength="8" placeholder="0"/></label>
-                    <view class="group-action-placeholder"/>
+                    <label class="set-count-field" @tap.stop><text>组数</text><input v-model="group.set_count" :disabled="todayCompleted" type="number" maxlength="3"/></label>
+                    <label v-for="method in action.recordMethods" :key="'target-'+method" @tap.stop><text>{{ recordMethodLabel(method) }}</text><input v-model="group.values[method]" :disabled="todayCompleted" :type="metricInputType(method)" maxlength="8" placeholder="0"/></label>
+                    <text v-if="action.plannedGroups.length>1&&!todayCompleted" class="group-remove" @tap.stop="removePlannedGroup(action,groupIndex)">×</text><view v-else class="group-action-placeholder"/>
+                    <text v-if="group.burst" class="group-burst" :style="{'--burst-x':group.burstX+'rpx','--burst-y':group.burstY+'rpx'}">+1</text>
                   </view>
-                  <view v-for="(group,groupIndex) in (currentPlan?action.actualGroups:[])" :key="group.id" class="metric-row actual-row" :style="metricGridStyle(action)">
-                    <text class="row-label">{{ groupIndex+1 }}组</text>
-                    <label v-for="method in action.recordMethods" :key="group.id+'-'+method"><text>{{ recordMethodLabel(method) }}</text><input v-model="group.values[method]" :disabled="todayCompleted" :type="metricInputType(method)" maxlength="8" placeholder="输入"/></label>
-                    <text v-if="!todayCompleted" class="group-remove" @tap="removeGroup(action,groupIndex)">×</text><view v-else class="group-action-placeholder"/>
+                  <button v-if="!todayCompleted" class="add-group" @tap="addPlannedGroup(action)">＋ 新增一组计划</button>
+                  <view v-for="(group,groupIndex) in (currentPlan?action.actualGroups:[])" :key="group.id" class="metric-row actual-row" :class="{'group-flash':group.flash}" :style="metricGridStyle(action)" @tap.self="incrementGroup(group)">
+                    <text class="row-label">实际</text>
+                    <label class="set-count-field" @tap.stop><text>组数</text><input v-model="group.set_count" :disabled="todayCompleted" type="number" maxlength="3"/></label>
+                    <label v-for="method in action.recordMethods" :key="group.id+'-'+method" @tap.stop><text>{{ recordMethodLabel(method) }}</text><input v-model="group.values[method]" :disabled="todayCompleted" :type="metricInputType(method)" maxlength="8" placeholder="输入"/></label>
+                    <text v-if="!todayCompleted" class="group-remove" @tap.stop="removeGroup(action,groupIndex)">×</text><view v-else class="group-action-placeholder"/>
+                    <text v-if="group.burst" class="group-burst" :style="{'--burst-x':group.burstX+'rpx','--burst-y':group.burstY+'rpx'}">+1</text>
                   </view>
                   <button v-if="currentPlan&&!todayCompleted" class="add-group" hover-class="pressed" @tap="addGroup(action)">＋ 新增一组</button>
                 </view>
@@ -72,8 +77,8 @@
             <view v-else class="part-empty"><view>＋</view><text>先从左侧添加训练部位</text><text>可选择动作管理中已有动作的部位</text></view>
           </view>
         </view>
-        <button class="complete-button" :class="{update:currentPlan}" :disabled="saving||loading" hover-class="pressed" @tap="savePlan">{{ todayCompleted?'该日训练已完成':currentPlan?'保存计划修改':'创建训练计划' }}</button>
-        <button v-if="!currentPlan" class="complete-button template-save-button" :disabled="savingTemplate||loading" @tap="openSaveTemplate">保存训练模板</button>
+        <button v-if="!currentPlan" class="complete-button" :disabled="saving||loading" hover-class="pressed" @tap="savePlan">创建训练计划</button>
+        <button v-if="!todayCompleted" class="complete-button template-save-button" :disabled="savingTemplate||loading" @tap="openSaveTemplate">保存训练模板</button>
         <button v-if="currentPlan&&!todayCompleted" class="complete-button update" :disabled="completing" hover-class="pressed" @tap="completeTraining">{{ completing?'正在完成训练…':'完成该日训练' }}</button>
       </view>
       <view class="template-manager">
@@ -101,12 +106,12 @@
       <view class="method-dialog choice-dialog" @tap.stop>
         <view class="method-dialog-head"><text class="dialog-back" @tap="backToPlanChooser">‹</text><view><text class="dialog-kicker">SELECT TEMPLATE</text><text>选择模板</text><text>点击名称选择，长按或点 ⓘ 预览</text></view></view>
         <scroll-view scroll-y class="choice-list">
-          <view v-for="item in myTemplates" :key="item.id" class="template-picker-row" :class="{active:selectedTemplateId===item.id}" @tap="selectedTemplateId=item.id" @longpress="previewTemplate(item)">
+          <view v-for="item in myTemplates" :key="item.id" class="template-picker-row" :class="{active:selectedTemplateIds.includes(item.id)}" @tap="toggleTemplate(item.id)" @longpress="previewTemplate(item)">
             <text>{{ item.name }}</text><text class="template-info" @tap.stop="previewTemplate(item)">ⓘ</text>
           </view>
           <view v-if="!myTemplates.length" class="choice-empty">暂无模板，可先在“我的模板”创建</view>
         </scroll-view>
-        <button class="picker-confirm" :disabled="!selectedTemplateId||saving" @tap="useSelectedTemplate">{{ saving?'正在创建…':'确定' }}</button>
+        <button class="picker-confirm" :disabled="!selectedTemplateIds.length||saving" @tap="useSelectedTemplate">{{ saving?'正在导入…':'确认导入' }}</button>
       </view>
     </view>
     <view v-if="templatePreview" class="method-overlay" @tap="templatePreview=null">
@@ -117,6 +122,16 @@
         </scroll-view>
       </view>
     </view>
+    <view v-if="overdueVisible" class="method-overlay"><view class="method-dialog overdue-dialog">
+      <view class="method-dialog-head"><view><text>您之前的训练没有确认完成：</text></view></view>
+      <scroll-view scroll-y class="overdue-list"><view v-for="item in overduePlans" :key="item.id" class="overdue-item"><text>{{ item.planDate }}</text><text>{{ item.name }}</text></view></scroll-view>
+      <button class="picker-confirm" @tap="acknowledgeOverdue">知道了</button>
+    </view></view>
+    <view v-if="templateConflictVisible" class="method-overlay"><view class="method-dialog overdue-dialog">
+      <view class="method-dialog-head"><text class="dialog-back" @tap="templateConflictVisible=false">‹</text><view><text>模板冲突动作如下：</text><text>默认以首个选择的模板为主</text></view></view>
+      <scroll-view scroll-y class="overdue-list"><view v-for="(item,index) in templateConflicts" :key="index" class="conflict-item"><text>{{ item.first }}：{{ item.second }}</text><text>{{ item.action }}</text><text>{{ item.firstText }}</text><text>{{ item.secondText }}</text></view></scroll-view>
+      <button class="picker-confirm" :disabled="saving" @tap="commitMergedTemplates">{{ saving?'正在导入…':'知道了' }}</button>
+    </view></view>
     <view v-if="saveTemplateVisible" class="method-overlay" @tap="saveTemplateVisible=false">
       <view class="method-dialog" @tap.stop>
         <view class="method-dialog-head"><text class="dialog-back" @tap="saveTemplateVisible=false">‹</text><view><text class="dialog-kicker">SAVE TEMPLATE</text><text>保存训练模板</text><text>保存当前动作和预计训练数据</text></view></view>
@@ -169,7 +184,7 @@ import { computed,ref,watch } from 'vue'
 import { onHide,onLoad,onShow,onUnload } from '@dcloudio/uni-app'
 import { getExercises } from '../../api/exercises'
 import { pageSafeTop } from '../../utils/page-safe-area'
-import { createMyTemplate,getMyTemplate,listMyTemplates,createPlanFromTemplate } from '../../api/templates'
+import { createMyTemplate,getMyTemplate,listMyTemplates } from '../../api/templates'
 import { USER_KEY } from '../../api/auth'
 import { bodyPartOptions,recordMethodOptions,recordMethodLabel } from '../../constants/exercise-meta'
 import {
@@ -189,9 +204,10 @@ const legacyPart={abs:'core'}
 const equipmentLabels={barbell:'杠铃',dumbbell:'哑铃',machine:'器械',cable:'绳索',bodyweight:'徒手',other:'其他'}
 const themeIndex=ref(0),actionLibrary=ref([]),planParts=ref([]),selectedPartKey=ref('')
 const currentPlan=ref(null),selectedDate=ref(''),loading=ref(false),saving=ref(false),completing=ref(false),loadError=ref('')
-const templateChooserVisible=ref(false),templatePickerVisible=ref(false),myTemplates=ref([]),selectedTemplateId=ref(''),templatePreview=ref(null)
+const templateChooserVisible=ref(false),templatePickerVisible=ref(false),myTemplates=ref([]),selectedTemplateIds=ref([]),templatePreview=ref(null)
 const saveTemplateVisible=ref(false),templateNameDraft=ref(''),savingTemplate=ref(false)
-const templateCreateAttempt=ref(null)
+const overduePlans=ref([]),overdueVisible=ref(false)
+const templateConflicts=ref([]),templateConflictVisible=ref(false),pendingTemplatePayload=ref(null)
 const editorRevealed=ref(false),contentEmerging=ref(false),contentFloating=ref(false),contentRevealKey=ref(0),draftPlanName=ref('')
 const completionAttempt=ref(null)
 const workoutStartedAt=ref('')
@@ -209,7 +225,7 @@ function getShellStyle(){
   return{}
 }
 const shellStyle=ref(getShellStyle())
-let dragStartY=0,mouseCleanup=null,partDragStartY=0,partMouseCleanup=null,draftSaveTimer=null,draftHydrating=false
+let dragStartY=0,mouseCleanup=null,partDragStartY=0,partMouseCleanup=null,draftSaveTimer=null,draftHydrating=false,cloudSaveTimer=null,cloudSavePromise=null,pageEntry=0
 const overlaySafeTop=pageSafeTop()
 const themeStyle=computed(()=>{const t=themes[themeIndex.value];return{'--accent':t.accent,'--accent-2':t.accent2,'--pale':t.pale,'--pale-2':t.pale2,'--glow-rgb':t.glow,'--page-safe-top':`${overlaySafeTop}px`}})
 const todayText=computed(()=>new Date(selectedDate.value+'T00:00:00').toLocaleDateString('zh-CN',{month:'long',day:'numeric',weekday:'long'}))
@@ -227,27 +243,30 @@ const planTitle=computed(()=>{if(currentPlan.value?.name)return currentPlan.valu
 const estimatedDuration=computed(()=>Math.max(20,totalActions.value*8))
 const todayCompleted=computed(()=>currentPlan.value?.status==='completed')
 const contentVisible=computed(()=>!!currentPlan.value||editorRevealed.value||planParts.value.length>0)
-const syncText=computed(()=>saving.value?'正在保存':loading.value?'正在同步':loadError.value?'同步失败':hasUnsavedPlan()?'本地草稿':currentPlan.value?'云端已保存':'尚未创建')
+const syncText=computed(()=>saving.value?'正在保存':loading.value?'正在同步':loadError.value?'保存失败 · 本地草稿已保留':hasUnsavedPlan()?'等待云端保存':currentPlan.value?'云端已保存':'尚未创建')
 function pad(v){return String(v).padStart(2,'0')}
 function dateKey(){const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`}
 function list(value){return Array.isArray(value)?value:[]}
 function emptyValues(methods,source={}){return Object.fromEntries(methods.map(method=>[method,source?.[method]??'']))}
-function createGroup(methods,values={}){return{id:'group-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),values:emptyValues(methods,values)}}
+function createGroup(methods,values={},setCount=1){return{id:'group-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),set_count:setCount,values:emptyValues(methods,values),flash:false,burst:false}}
 function normalizeGroups(groups,methods,legacyActual,plannedSets=1){
-  if(Array.isArray(groups)&&groups.length)return groups.map(group=>createGroup(methods,group?.values||group||{}))
+  if(Array.isArray(groups)&&groups.length)return groups.map(group=>createGroup(methods,group?.values||group||{},group?.set_count??1))
   const legacy={weight:legacyActual?.kg,reps:legacyActual?.reps}
-  return Object.values(legacy).some(value=>value!==null&&value!==undefined&&value!=='')?[createGroup(methods,legacy)]:Array.from({length:Math.max(1,Number(plannedSets)||1)},()=>createGroup(methods))
+  return Object.values(legacy).some(value=>value!==null&&value!==undefined&&value!=='')?[createGroup(methods,legacy)]:[createGroup(methods)]
 }
+function normalizePlannedGroups(groups,methods,target,sets){return Array.isArray(groups)&&groups.length?groups.map(group=>createGroup(methods,group.values,group.set_count??1)):[createGroup(methods,target,Number(sets)||1)]}
+function groupTotal(groups){return groups.reduce((sum,group)=>sum+(Number(group.set_count)||0),0)}
+function incrementGroup(group){if(todayCompleted.value||Number(group.set_count)>=100)return;group.set_count=Number(group.set_count||0)+1;group.flash=true;group.burst=false;group.burstX=Math.round(Math.random()*32-16);group.burstY=-10-Math.round(Math.random()*16);setTimeout(()=>{group.flash=false},280);setTimeout(()=>{group.burst=true},0);setTimeout(()=>{group.burst=false},650)}
 function equipmentName(value){return equipmentLabels[value]||value||'徒手'}
 function actionParts(exercise){const modern=list(exercise.bodyParts);return modern.length?modern:[legacyPart[exercise.category]||exercise.category].filter(Boolean)}
-function catalogAction(exercise,partKey){const methods=list(exercise.recordMethods).length?list(exercise.recordMethods):['weight','reps'];return{id:exercise.id,exerciseId:exercise.id,name:exercise.name,equipment:equipmentName(exercise.equipment),bodyPart:partKey,exerciseDefaultMethods:[...methods],recordMethods:[...methods],variants:list(exercise.variants),variantId:null,variant:null,targetMetrics:emptyValues(methods),plannedSets:3,actualGroups:Array.from({length:3},()=>createGroup(methods)),restSeconds:null,notes:null}}
+function catalogAction(exercise,partKey){const methods=list(exercise.recordMethods).length?list(exercise.recordMethods):['weight','reps'];return{id:exercise.id,exerciseId:exercise.id,name:exercise.name,equipment:equipmentName(exercise.equipment),bodyPart:partKey,exerciseDefaultMethods:[...methods],recordMethods:[...methods],variants:list(exercise.variants),variantId:null,variant:null,targetMetrics:emptyValues(methods),plannedGroups:[createGroup(methods)],plannedSets:1,actualGroups:[createGroup(methods)],restSeconds:null,notes:null}}
 function planAction(item){
   const methods=list(item.recordMethods).length?list(item.recordMethods):(list(item.exercise?.recordMethods).length?list(item.exercise.recordMethods):['weight','reps'])
   const target=item.targetMetrics||{weight:item.weight,reps:item.reps}
   const variants=list(item.exercise?.variants),variant=item.variant||variants.find(value=>value.id===item.variantId)||null
-  return{id:item.id||item.exerciseId,exerciseId:item.exerciseId,name:item.exercise?.name||'已归档动作',equipment:equipmentName(item.exercise?.equipment),bodyPart:item.bodyPart||actionParts(item.exercise||{})[0]||'other',exerciseDefaultMethods:list(item.exercise?.recordMethods).length?list(item.exercise.recordMethods):['weight','reps'],recordMethods:methods,variants,variantId:item.variantId||null,variant,targetMetrics:emptyValues(methods,target),plannedSets:item.sets||list(item.actualGroups).length||1,actualGroups:normalizeGroups(item.actualGroups,methods,item.actual,item.sets),restSeconds:item.restSeconds??null,notes:item.notes??null}
+  return{id:item.id||item.exerciseId,exerciseId:item.exerciseId,name:item.exercise?.name||'已归档动作',equipment:equipmentName(item.exercise?.equipment),bodyPart:item.bodyPart||actionParts(item.exercise||{})[0]||'other',exerciseDefaultMethods:list(item.exercise?.recordMethods).length?list(item.exercise.recordMethods):['weight','reps'],recordMethods:methods,variants,variantId:item.variantId||null,variant,targetMetrics:emptyValues(methods,target),plannedGroups:normalizePlannedGroups(item.plannedGroups,methods,target,item.sets),plannedSets:item.sets||1,actualGroups:normalizeGroups(item.actualGroups,methods,item.actual,item.sets),restSeconds:item.restSeconds??null,notes:item.notes??null}
 }
-function draftSignature(){return JSON.stringify(planParts.value.map(part=>({key:part.key,actions:part.actions.map(action=>({exerciseId:action.exerciseId,variantId:action.variantId,recordMethods:action.recordMethods,targetMetrics:action.targetMetrics,plannedSets:action.plannedSets,actualGroups:action.actualGroups.map(group=>group.values),restSeconds:action.restSeconds,notes:action.notes}))})))}
+function draftSignature(){return JSON.stringify(planParts.value.map(part=>({key:part.key,actions:part.actions.map(action=>({exerciseId:action.exerciseId,variantId:action.variantId,recordMethods:action.recordMethods,plannedSets:action.plannedSets,plannedGroups:(action.plannedGroups||[]).map(group=>({set_count:group.set_count,values:group.values})),actualGroups:action.actualGroups.map(group=>({set_count:group.set_count,values:group.values})),restSeconds:action.restSeconds,notes:action.notes}))})))}
 function draftStorageKey(date=selectedDate.value){return PLAN_DRAFT_PREFIX+date}
 function clearLocalDraft(date=selectedDate.value){if(date)uni.removeStorageSync(draftStorageKey(date))}
 function saveLocalDraft(){
@@ -266,10 +285,30 @@ function scheduleLocalDraftSave(){
   if(loading.value)return
   if(draftSaveTimer)clearTimeout(draftSaveTimer)
   draftSaveTimer=setTimeout(()=>{draftSaveTimer=null;saveLocalDraft()},120)
+  if(currentPlan.value&&!todayCompleted.value){if(cloudSaveTimer)clearTimeout(cloudSaveTimer);cloudSaveTimer=setTimeout(()=>{cloudSaveTimer=null;flushCloudSave()},800)}
 }
 function flushLocalDraft(){
   if(draftSaveTimer){clearTimeout(draftSaveTimer);draftSaveTimer=null}
   saveLocalDraft()
+  if(cloudSaveTimer){clearTimeout(cloudSaveTimer);cloudSaveTimer=null}
+  if(currentPlan.value&&!todayCompleted.value&&hasUnsavedPlan())flushCloudSave()
+}
+async function flushCloudSave(){
+  if(!currentPlan.value||todayCompleted.value||!hasUnsavedPlan())return cloudSavePromise
+  if(cloudSavePromise)return cloudSavePromise
+  const plan=currentPlan.value,entry=pageEntry,signature=draftSignature(),data=payload()
+  if(!validPayload(data,{silent:true})){loadError.value='请核对组数或训练数据';saveLocalDraft();return}
+  cloudSavePromise=(async()=>{
+    saving.value=true;loadError.value=''
+    try{
+      const saved=requirePlanResponse(await updateTrainingPlan(plan.id,{...data,version:plan.version}))
+      if(entry!==pageEntry||selectedDate.value!==data.planDate)return
+      if(draftSignature()===signature){applyPlan(saved);clearLocalDraft()}
+      else{currentPlan.value=saved;savedDraftSignature.value=signature;saveLocalDraft()}
+    }catch(error){loadError.value=error?.message||'云端保存失败';saveLocalDraft();uni.showToast({title:'云端保存失败，已保留本地草稿',icon:'none'})}
+    finally{saving.value=false;cloudSavePromise=null;if(entry===pageEntry&&hasUnsavedPlan()&&!loadError.value){cloudSaveTimer=setTimeout(()=>{cloudSaveTimer=null;flushCloudSave()},300)}}
+  })()
+  return cloudSavePromise
 }
 function restoreLocalDraft(){
   const draft=uni.getStorageSync(draftStorageKey())
@@ -277,18 +316,28 @@ function restoreLocalDraft(){
   const sameBase=(draft.basePlanId||null)===(currentPlan.value?.id||null)
   const sameVersion=!draft.basePlanId||draft.basePlanVersion===currentPlan.value?.version
   if(draft.schemaVersion!==1||draft.userScope!==USER_SCOPE||draft.planDate!==selectedDate.value||
-      !sameBase||!sameVersion||todayCompleted.value||!Array.isArray(draft.planParts)){
+      !sameBase||todayCompleted.value||!Array.isArray(draft.planParts)){
     clearLocalDraft()
-    if(!sameBase||!sameVersion)uni.showToast({title:'云端计划已更新，旧草稿未恢复',icon:'none'})
+    if(!sameBase)uni.showToast({title:'计划已更换，旧草稿未恢复',icon:'none'})
     return false
   }
+  if(!sameVersion){
+    uni.showModal({title:'本地草稿与云端版本冲突',content:'云端计划已在其他位置更新。是否恢复本机草稿并覆盖云端版本？',confirmText:'恢复草稿',cancelText:'保留云端',success:result=>{
+      if(result.confirm){applyStoredDraft(draft);saveLocalDraft();flushCloudSave()}
+      else clearLocalDraft()
+    }})
+    return false
+  }
+  applyStoredDraft(draft)
+  return true
+}
+function applyStoredDraft(draft){
   const partMap=new Map(parts.map(part=>[part.key,part]))
   planParts.value=draft.planParts.filter(part=>partMap.has(part?.key)&&Array.isArray(part.actions))
-    .map(part=>({...partMap.get(part.key),actions:part.actions}))
+    .map(part=>({...partMap.get(part.key),actions:part.actions.map(action=>({...action,plannedGroups:normalizePlannedGroups(action.plannedGroups,action.recordMethods,action.targetMetrics,action.plannedSets),actualGroups:normalizeGroups(action.actualGroups,action.recordMethods,action.actual,action.plannedSets)}))}))
   selectedPartKey.value=planParts.value.some(part=>part.key===draft.selectedPartKey)
     ?draft.selectedPartKey:planParts.value[0]?.key||''
   workoutStartedAt.value=draft.workoutStartedAt||workoutStartedAt.value
-  return true
 }
 function hasMetricValue(value){return value!==''&&value!==null&&value!==undefined&&Number.isFinite(Number(value))}
 function isActionDone(action){return action.actualGroups.length>0&&action.actualGroups.every(group=>action.recordMethods.every(method=>hasMetricValue(group.values[method])))}
@@ -342,8 +391,22 @@ async function load(){
   loading.value=true;draftHydrating=true;loadError.value=''
   try{await Promise.all([loadExerciseLibrary(),loadPlan()]);if(restoreLocalDraft())editorRevealed.value=true}
   catch(error){showError(error,'训练计划加载失败')}
-  finally{loading.value=false;draftHydrating=false}
+  finally{loading.value=false;draftHydrating=false;if(currentPlan.value&&!todayCompleted.value&&hasUnsavedPlan()&&!loadError.value)cloudSaveTimer=setTimeout(()=>{cloudSaveTimer=null;flushCloudSave()},800)}
 }
+const OVERDUE_ACK_KEY='fit_note_overdue_ack_'+USER_SCOPE
+async function checkOverduePlans(today){
+  if(uni.getStorageSync(OVERDUE_ACK_KEY)===today)return
+  const endDate=new Date(today+'T00:00:00');endDate.setDate(endDate.getDate()-1)
+  const prior=`${endDate.getFullYear()}-${pad(endDate.getMonth()+1)}-${pad(endDate.getDate())}`
+  try{
+    const items=[];let page=1,result
+    do{result=await listTrainingPlans({endDate:prior,status:'draft',page,pageSize:100});items.push(...(result.items||[]));page++}while(result.hasMore)
+    overduePlans.value=items
+    if(items.length)overdueVisible.value=true
+    else uni.setStorageSync(OVERDUE_ACK_KEY,today)
+  }catch(error){showError(error,'历史计划检查失败')}
+}
+function acknowledgeOverdue(){overdueVisible.value=false;uni.setStorageSync(OVERDUE_ACK_KEY,dateKey())}
 function ensureEditable(){if(!todayCompleted.value)return true;uni.showToast({title:'已完成计划不可修改',icon:'none'});return false}
 function addPart(){if(!ensureEditable())return;if(!availablePartChoices.value.length){uni.showToast({title:'训练部位已全部添加',icon:'none'});return}partChooserVisible.value=true}
 function closePartChooser(){partChooserVisible.value=false}
@@ -360,10 +423,12 @@ function closeActionChooser(){actionChooserVisible.value=false;actionChooserKeyw
 function chooseAction(action){if(!action||!activePart.value)return;activePart.value.actions.push(catalogAction(action,activePart.value.key));closeActionChooser()}
 function removeAction(action){if(!ensureEditable())return;activePart.value.actions=activePart.value.actions.filter(item=>item.id!==action.id)}
 function metricInputType(method){return method==='reps'?'number':'digit'}
-function metricGridStyle(action){return{gridTemplateColumns:`47rpx repeat(${action.recordMethods.length},minmax(82rpx,1fr)) 35rpx`}}
+function metricGridStyle(action){return{gridTemplateColumns:`47rpx 54rpx repeat(${action.recordMethods.length},minmax(82rpx,1fr)) 35rpx`}}
 function addGroup(action){action.actualGroups.push(createGroup(action.recordMethods))}
+function addPlannedGroup(action){action.plannedGroups.push(createGroup(action.recordMethods))}
+function removePlannedGroup(action,index){action.plannedGroups.splice(index,1)}
 function selectVariant(action,event){if(!ensureEditable())return;const variant=action.variants[Number(event.detail.value)];action.variant=variant||null;action.variantId=variant?.id||null}
-function applyRecordMethods(action,methods){const previousTarget=action.targetMetrics||{},previousGroups=action.actualGroups||[];action.recordMethods=[...methods];action.targetMetrics=emptyValues(methods,previousTarget);action.actualGroups=previousGroups.length?previousGroups.map(group=>createGroup(methods,group.values)):[createGroup(methods)]}
+function applyRecordMethods(action,methods){const previousTarget=action.targetMetrics||{},previousGroups=action.actualGroups||[];action.recordMethods=[...methods];action.targetMetrics=emptyValues(methods,previousTarget);action.plannedGroups=action.plannedGroups.map(group=>createGroup(methods,group.values,group.set_count));action.actualGroups=previousGroups.length?previousGroups.map(group=>createGroup(methods,group.values,group.set_count)):[createGroup(methods)]}
 function editRecordMethods(action){if(!ensureEditable())return;methodEditorAction.value=action;methodDraft.value=[...action.recordMethods]}
 function closeMethodEditor(){methodEditorAction.value=null;methodDraft.value=[]}
 function changeMethodDraft(event){methodDraft.value=recordMethodOptions.map(item=>item.key).filter(key=>(event.detail.value||[]).includes(key))}
@@ -387,20 +452,23 @@ function payload({includeActualGroups=false}={}){
   return {
     planDate:selectedDate.value,name:draftPlanName.value||null,durationMinutes:estimatedDuration.value,
     exercises:planParts.value.flatMap(part=>part.actions.map(action=>{
-      const targetMetrics=Object.fromEntries(action.recordMethods.map(method=>[method,optionalNumber(action.targetMetrics[method],method==='reps')]))
-      const actualGroups=(currentPlan.value||includeActualGroups)?action.actualGroups.map(group=>({values:Object.fromEntries(action.recordMethods.map(method=>[method,optionalNumber(group.values[method],method==='reps')]))})):null
+      const plannedGroups=action.plannedGroups.map(group=>({set_count:optionalNumber(group.set_count,true),values:Object.fromEntries(action.recordMethods.map(method=>[method,optionalNumber(group.values[method],method==='reps')]))}))
+      const targetMetrics=plannedGroups[0]?.values||{}
+      const actualGroups=(currentPlan.value||includeActualGroups)?action.actualGroups.map(group=>({set_count:optionalNumber(group.set_count,true),values:Object.fromEntries(action.recordMethods.map(method=>[method,optionalNumber(group.values[method],method==='reps')]))})):null
       const first=actualGroups?.[0]?.values||{}
-      return{exerciseId:action.exerciseId,variantId:action.variantId,bodyPart:part.key,recordMethods:[...action.recordMethods],targetMetrics,actualGroups,
+      return{exerciseId:action.exerciseId,variantId:action.variantId,bodyPart:part.key,recordMethods:[...action.recordMethods],targetMetrics,plannedGroups,actualGroups,
         sets:optionalNumber(action.plannedSets,true),reps:targetMetrics.reps??null,weight:targetMetrics.weight??null,
-        actual:actualGroups?{kg:first.weight??null,reps:first.reps??null,sets:actualGroups.length}:null,
+        actual:actualGroups?{kg:first.weight??null,reps:first.reps??null,sets:groupTotal(actualGroups)}:null,
         restSeconds:action.restSeconds,notes:action.notes,sortOrder:++sortOrder}
     }))
   }
 }
-function validPayload(data){
-  if(!data.exercises.length){uni.showToast({title:'请至少添加一个训练动作',icon:'none'});return false}
-  if(data.exercises.some(item=>!Number.isInteger(item.sets)||item.sets<1||item.sets>100)){uni.showToast({title:'预计组数请填写 1–100',icon:'none'});return false}
-  if(data.exercises.some(item=>[item.sets,item.reps,item.weight,item.restSeconds,...Object.values(item.targetMetrics),...(item.actualGroups||[]).flatMap(group=>Object.values(group.values))].some(Number.isNaN))){uni.showToast({title:'训练数据格式不正确',icon:'none'});return false}
+function validPayload(data,{silent=false}={}){
+  if(!data.exercises.length){if(!silent)uni.showToast({title:'请至少添加一个训练动作',icon:'none'});return false}
+  if(data.exercises.some(item=>!Number.isInteger(item.sets)||item.sets<1||item.sets>100)){if(!silent)uni.showToast({title:'预计组数请填写 1–100',icon:'none'});return false}
+  if(data.exercises.some(item=>item.plannedGroups.some(group=>!Number.isInteger(group.set_count)||group.set_count<1||group.set_count>100)||groupTotal(item.plannedGroups)!==item.sets)){if(!silent)uni.showModal({title:'请核对组数',content:'每行计划组数之和必须等于预计组数。',showCancel:false});return false}
+  if(data.exercises.some(item=>item.actualGroups&&(groupTotal(item.actualGroups)>100||item.actualGroups.some(group=>!Number.isInteger(group.set_count)||group.set_count<1||group.set_count>100)))){if(!silent)uni.showToast({title:'实际组数请填写 1–100',icon:'none'});return false}
+  if(data.exercises.some(item=>[item.sets,item.reps,item.weight,item.restSeconds,...item.plannedGroups.flatMap(group=>Object.values(group.values)),...(item.actualGroups||[]).flatMap(group=>Object.values(group.values))].some(Number.isNaN))){if(!silent)uni.showToast({title:'训练数据格式不正确',icon:'none'});return false}
   return true
 }
 function hasUnsavedPlan(){return draftSignature()!==savedDraftSignature.value}
@@ -408,7 +476,10 @@ async function changePlanDate(event){
   const next=event?.detail?.value
   if(!/^\d{4}-\d{2}-\d{2}$/.test(next||'')||next===selectedDate.value)return
   const switchDate=async()=>{
+    await flushCloudSave()
+    if(hasUnsavedPlan()&&currentPlan.value){uni.showToast({title:'当前修改未同步，已保留本地草稿',icon:'none'})}
     const previous=selectedDate.value
+    pageEntry++
     selectedDate.value=next;uni.setStorageSync(PLAN_LAST_DATE_KEY,next);loading.value=true;loadError.value=''
     try{await loadPlan();restoreLocalDraft()}
     catch(error){selectedDate.value=previous;uni.setStorageSync(PLAN_LAST_DATE_KEY,previous);showError(error,'训练计划加载失败')}
@@ -434,13 +505,15 @@ async function savePlan(options={}){
   if(saving.value)return
   const data=payload({includeActualGroups:options.includeActualGroups===true})
   if(!validPayload(data))return
+  const signature=draftSignature()
   saving.value=true;loadError.value=''
   try{
     const saved=currentPlan.value
       ?await updateTrainingPlan(currentPlan.value.id,{...data,version:currentPlan.value.version})
       :await createTrainingPlan(data,'plan-'+selectedDate.value+'-'+Date.now())
-    applyPlan(requirePlanResponse(saved))
-    clearLocalDraft()
+    const confirmed=requirePlanResponse(saved)
+    if(draftSignature()===signature){applyPlan(confirmed);clearLocalDraft()}
+    else{currentPlan.value=confirmed;savedDraftSignature.value=signature;saveLocalDraft();cloudSaveTimer=setTimeout(()=>{cloudSaveTimer=null;flushCloudSave()},300)}
     uni.showToast({title:currentPlan.value?.version>1?'计划已更新':'计划已创建',icon:'success'})
   }catch(error){
     if(error?.code==='PLAN_VERSION_CONFLICT'){
@@ -456,12 +529,13 @@ async function savePlan(options={}){
 async function completeTraining(){
   const plan=currentPlan.value
   if(!plan||plan.status==='completed'||completing.value)return
-  if(draftSignature()!==savedDraftSignature.value){uni.showToast({title:'请先保存计划修改',icon:'none'});return}
+  await flushCloudSave()
+  if(draftSignature()!==savedDraftSignature.value){uni.showToast({title:'请等待云端保存成功后再完成训练',icon:'none'});return}
   if(!Array.isArray(plan.exercises)||!plan.exercises.length){uni.showToast({title:'计划至少需要一个动作',icon:'none'});return}
   const actualExercises=planParts.value.flatMap(part=>part.actions.map(action=>{
-    const actualGroups=action.actualGroups.map(group=>({values:Object.fromEntries(action.recordMethods.map(method=>[method,optionalNumber(group.values[method],method==='reps')]))}))
+    const actualGroups=action.actualGroups.map(group=>({set_count:optionalNumber(group.set_count,true),values:Object.fromEntries(action.recordMethods.map(method=>[method,optionalNumber(group.values[method],method==='reps')]))}))
     const first=actualGroups[0]?.values||{}
-    return{exerciseId:action.exerciseId,recordMethods:[...action.recordMethods],actualGroups,actual:{kg:first.weight??0,reps:first.reps??1,sets:actualGroups.length}}
+    return{exerciseId:action.exerciseId,recordMethods:[...action.recordMethods],actualGroups,actual:{kg:first.weight??0,reps:first.reps??1,sets:groupTotal(actualGroups)}}
   }))
   if(actualExercises.some(item=>!item.actualGroups.length||item.actualGroups.some(group=>Object.values(group.values).some(value=>value===null||Number.isNaN(value))))) {
     uni.showToast({title:'请完整填写每个动作的实际数据',icon:'none'});return
@@ -524,22 +598,45 @@ function startBlankPlan(){
   templateChooserVisible.value=false;draftPlanName.value='';planParts.value=[];selectedPartKey.value='';revealContent()
 }
 async function openTemplatePicker(){
-  templateChooserVisible.value=false;templatePickerVisible.value=true;selectedTemplateId.value=''
+  templateChooserVisible.value=false;templatePickerVisible.value=true;selectedTemplateIds.value=[]
   try{const result=await listMyTemplates({page:1,pageSize:100});myTemplates.value=result?.items||[]}
   catch(error){showError(error,'模板加载失败')}
 }
 function closeTemplatePicker(){templatePickerVisible.value=false}
 function backToPlanChooser(){templatePickerVisible.value=false;templateChooserVisible.value=true}
 async function previewTemplate(item){try{templatePreview.value=await getMyTemplate(item.id)}catch(error){showError(error,'模板预览失败')}}
+function toggleTemplate(id){selectedTemplateIds.value=selectedTemplateIds.value.includes(id)?selectedTemplateIds.value.filter(value=>value!==id):[...selectedTemplateIds.value,id]}
+function templateGroupText(action){return (action.plannedGroups?.length?action.plannedGroups:[{set_count:action.plannedSets,values:action.targetMetrics}]).map(group=>`${group.set_count}组 ${action.recordMethods.map(method=>`${recordMethodLabel(method)} ${group.values?.[method]??'—'}`).join(' ')}`).join('；')}
 async function useSelectedTemplate(){
-  if(!selectedTemplateId.value||saving.value)return
+  if(!selectedTemplateIds.value.length||saving.value)return
   saving.value=true;loadError.value=''
   try{
-    if(!templateCreateAttempt.value||templateCreateAttempt.value.id!==selectedTemplateId.value||templateCreateAttempt.value.date!==selectedDate.value)templateCreateAttempt.value={id:selectedTemplateId.value,date:selectedDate.value,key:`template-${selectedTemplateId.value}-${selectedDate.value}-${Date.now()}`}
-    const saved=await createPlanFromTemplate(selectedTemplateId.value,selectedDate.value,templateCreateAttempt.value.key)
+    const selected=await Promise.all(selectedTemplateIds.value.map(id=>getMyTemplate(id)))
+    const seen=new Map(),merged=[],conflicts=[]
+    for(const template of selected){
+      for(const action of template.exercises){
+        const previous=seen.get(action.exerciseId)
+        if(previous){conflicts.push({first:previous.template.name,second:template.name,action:action.exerciseName||'系统动作',firstText:templateGroupText(previous.action),secondText:templateGroupText(action)});continue}
+        seen.set(action.exerciseId,{template,action});merged.push(action)
+      }
+    }
+    if(merged.length>100){uni.showModal({title:'模板动作过多',content:'合并后动作超过 100 个，请减少所选模板。',showCancel:false});return}
+    const exercises=merged.map((action,index)=>({exerciseId:action.exerciseId,variantId:action.variantId||null,bodyPart:action.bodyPart,recordMethods:action.recordMethods,targetMetrics:action.targetMetrics,plannedGroups:action.plannedGroups||[{set_count:action.plannedSets,values:action.targetMetrics}],sets:action.plannedSets,reps:action.targetMetrics.reps??null,weight:action.targetMetrics.weight??null,actualGroups:[{set_count:1,values:Object.fromEntries(action.recordMethods.map(method=>[method,null]))}],actual:{kg:null,reps:null,sets:null},restSeconds:action.restSeconds??null,notes:action.notes??null,sortOrder:index+1}))
+    pendingTemplatePayload.value={planDate:selectedDate.value,name:selected.map(item=>item.name).join(' + ').slice(0,100),durationMinutes:Math.min(1440,selected.reduce((sum,item)=>sum+item.durationMinutes,0)),exercises}
+    templateConflicts.value=conflicts
+    if(conflicts.length)templateConflictVisible.value=true
+    else{saving.value=false;await commitMergedTemplates()}
+  }catch(error){showError(error,'模板加载失败')}
+  finally{saving.value=false}
+}
+async function commitMergedTemplates(){
+  const data=pendingTemplatePayload.value
+  if(!data||saving.value)return
+  saving.value=true
+  try{
+    const saved=await createTrainingPlan(data,`merged-template-${data.planDate}-${Date.now()}`)
     const plan=requirePlanResponse(saved)
-    planParts.value=[];selectedPartKey.value=''
-    applyPlan(plan);clearLocalDraft();templateCreateAttempt.value=null;templatePickerVisible.value=false;templatePreview.value=null;revealContent()
+    planParts.value=[];selectedPartKey.value='';applyPlan(plan);clearLocalDraft();pendingTemplatePayload.value=null;templateConflictVisible.value=false;templatePickerVisible.value=false;revealContent()
     uni.showToast({title:'计划已创建',icon:'success'})
   }catch(error){showError(error,error?.code==='PLAN_DATE_CONFLICT'?'当天已有训练计划':'模板创建计划失败')}
   finally{saving.value=false}
@@ -555,16 +652,30 @@ async function saveCurrentAsTemplate(){
   if(!name){uni.showToast({title:'请填写模板名称',icon:'none'});return}
   savingTemplate.value=true
   try{
-    await createMyTemplate({name,durationMinutes:data.durationMinutes,exercises:data.exercises.map(item=>({exerciseId:item.exerciseId,variantId:item.variantId,bodyPart:item.bodyPart,recordMethods:item.recordMethods,targetMetrics:item.targetMetrics,plannedSets:item.sets,restSeconds:item.restSeconds,notes:item.notes,sortOrder:item.sortOrder}))})
+    await createMyTemplate({name,durationMinutes:data.durationMinutes,exercises:data.exercises.map(item=>({exerciseId:item.exerciseId,variantId:item.variantId,bodyPart:item.bodyPart,recordMethods:item.recordMethods,targetMetrics:item.targetMetrics,plannedGroups:item.plannedGroups,plannedSets:item.sets,restSeconds:item.restSeconds,notes:item.notes,sortOrder:item.sortOrder}))})
     saveTemplateVisible.value=false;uni.showToast({title:'模板已保存',icon:'success'})
   }catch(error){showError(error,'模板保存失败')}
   finally{savingTemplate.value=false}
 }
-function goMyTemplates(){uni.navigateTo({url:'/pages/my-templates/my-templates'})}
-function goCommunity(){uni.navigateTo({url:'/pages/template-community/template-community'})}
-function goBack(){uni.navigateBack({fail:()=>uni.reLaunch({url:'/pages/home/home'})})}
-onLoad(options=>{const stored=uni.getStorageSync(PLAN_LAST_DATE_KEY),requested=options?.date||'';selectedDate.value=/^\d{4}-\d{2}-\d{2}$/.test(requested)?requested:/^\d{4}-\d{2}-\d{2}$/.test(stored||'')?stored:dateKey();uni.setStorageSync(PLAN_LAST_DATE_KEY,selectedDate.value)})
-onShow(load)
+async function leavePlan(next){
+  flushLocalDraft();await flushCloudSave()
+  if(currentPlan.value&&hasUnsavedPlan()){
+    uni.showModal({title:'计划尚未同步',content:'修改已保留在本机草稿，云端尚未确认保存。仍要离开吗？',confirmText:'离开',success:result=>{if(result.confirm)next()}})
+    return
+  }
+  next()
+}
+function goMyTemplates(){leavePlan(()=>uni.navigateTo({url:'/pages/my-templates/my-templates'}))}
+function goCommunity(){leavePlan(()=>uni.navigateTo({url:'/pages/template-community/template-community'}))}
+function goBack(){leavePlan(()=>uni.navigateBack({fail:()=>uni.reLaunch({url:'/pages/home/home'})}))}
+onLoad(()=>{selectedDate.value=dateKey()})
+onShow(async()=>{
+  if(cloudSavePromise)await cloudSavePromise
+  const today=dateKey()
+  if(selectedDate.value!==today){flushLocalDraft();pageEntry++;selectedDate.value=today}
+  await load()
+  await checkOverduePlans(today)
+})
 watch(planParts,scheduleLocalDraftSave,{deep:true})
 onHide(flushLocalDraft)
 onUnload(flushLocalDraft)
@@ -584,6 +695,7 @@ page{background:#f6f5fa}.page{position:relative;min-height:100vh;overflow:hidden
 .template-save-button{margin-top:12rpx;color:var(--accent);background:var(--pale);box-shadow:none}.dialog-back{flex:none;margin-right:15rpx}.template-picker-row{display:flex;align-items:center;justify-content:space-between;min-height:67rpx;margin-top:10rpx;padding:0 17rpx;border:2rpx solid transparent;border-radius:16rpx;background:#fff;color:#495061;font-size:18rpx}.template-picker-row.active{border-color:var(--accent);background:var(--pale)}.template-info{display:grid;place-items:center;width:39rpx;height:39rpx;border-radius:50%;color:var(--accent);background:var(--pale);font-size:23rpx}.picker-confirm{height:68rpx;margin-top:20rpx;border:0;border-radius:18rpx;color:#fff;background:var(--accent);font-size:19rpx;line-height:68rpx}.picker-confirm[disabled]{opacity:.45}.picker-confirm::after{border:0}.template-preview-list{max-height:53vh;margin-top:18rpx}.template-preview-item{display:flex;justify-content:space-between;gap:12rpx;margin-top:8rpx;padding:12rpx;border-radius:13rpx;background:var(--pale-2);font-size:16rpx}.template-preview-item text:last-child{color:#9299a8}.template-name-input{height:66rpx;margin-top:23rpx;padding:0 16rpx;border:1rpx solid rgba(var(--glow-rgb),.25);border-radius:15rpx;background:#fff;font-size:18rpx}
 .choice-dialog{display:flex;flex-direction:column;overflow:hidden}.choice-list{max-height:56vh;margin-top:22rpx}.choice-item{display:grid;grid-template-columns:55rpx minmax(0,1fr) 38rpx;align-items:center;gap:14rpx;margin-bottom:11rpx;padding:15rpx;border:1rpx solid rgba(var(--glow-rgb),.12);border-radius:20rpx;background:#fff;color:var(--accent)}.choice-item>view:nth-child(2){min-width:0}.choice-item>view:nth-child(2) text{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.choice-item>view:nth-child(2) text:first-child{color:#41485a;font-size:19rpx;font-weight:800}.choice-item>view:nth-child(2) text:last-child{margin-top:4rpx;color:#969caa;font-size:14rpx;font-weight:500}.choice-item>text{font-size:27rpx;text-align:center}.choice-symbol{width:48rpx;height:48rpx;display:grid;place-items:center;border-radius:15rpx;background:var(--pale);font-size:21rpx}.choice-pressed{opacity:.72;transform:scale(.99)}.choice-search{display:flex;align-items:center;gap:10rpx;margin-top:22rpx;padding:0 17rpx;border:1rpx solid rgba(var(--glow-rgb),.16);border-radius:18rpx;background:#fff;color:var(--accent)}.choice-search input{height:70rpx;min-width:0;flex:1;color:#41485a;font-size:18rpx}.action-choice-list{margin-top:13rpx}.choice-empty{padding:46rpx 15rpx;color:#9298a6;font-size:17rpx;text-align:center}
 .template-dialog{width:min(690rpx,590px)}.template-choice-list{max-height:60vh}.template-choice-item{min-height:76rpx}.content-emerging{animation:surface-panel 680ms cubic-bezier(.18,.82,.24,1) both}.content-floating{animation:surface-drift 4.8s ease-in-out infinite}.content-emerging .content-head{animation:surface-item 620ms 110ms cubic-bezier(.16,.86,.25,1) both}.content-emerging .planner{animation:surface-item 720ms 260ms cubic-bezier(.16,.86,.25,1) both}.content-emerging .complete-button{animation:surface-item 650ms 430ms cubic-bezier(.16,.86,.25,1) both}.content-emerging .complete-button+.complete-button{animation-delay:540ms}@keyframes surface-panel{0%{opacity:0;transform:translateY(92rpx) scale(.97)}55%{opacity:1;transform:translateY(-8rpx) scale(1.006)}78%{transform:translateY(5rpx) scale(1)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes surface-item{0%{opacity:0;transform:translateY(44rpx)}70%{opacity:1;transform:translateY(-5rpx)}100%{opacity:1;transform:translateY(0)}}@keyframes surface-drift{0%,100%{transform:translateY(0)}50%{transform:translateY(-5rpx)}}
+.metric-row{position:relative}.set-count-field input{font-weight:800;color:var(--accent)}.group-flash{animation:group-pulse .28s ease-out}.group-burst{position:absolute;top:-12rpx;right:25%;color:var(--accent);font-size:19rpx;font-weight:800;pointer-events:none;animation:group-burst .65s ease-out forwards}@keyframes group-pulse{50%{background:rgba(var(--glow-rgb),.25)}}@keyframes group-burst{to{opacity:0;transform:translate(var(--burst-x),var(--burst-y))}}.overdue-dialog{display:flex;flex-direction:column}.overdue-list{max-height:50vh;margin-top:17rpx}.overdue-item,.conflict-item{display:flex;flex-direction:column;gap:5rpx;margin:8rpx 0;padding:13rpx;border-radius:13rpx;background:var(--pale-2);font-size:17rpx}.overdue-item text:first-child,.conflict-item text:first-child{color:var(--accent);font-weight:800}.conflict-item text:nth-child(2){font-weight:750}
 @media (prefers-reduced-motion:reduce){.content-emerging,.content-floating,.content-emerging .content-head,.content-emerging .planner,.content-emerging .complete-button{animation-duration:1ms;animation-delay:0ms;animation-iteration-count:1}}
 .part-tab.dragging{z-index:3;transform:scale(1.035);box-shadow:0 14rpx 30rpx rgba(var(--glow-rgb),.2)}.part-drag-handle{display:grid;place-items:center;width:100%;height:29rpx;margin-top:5rpx;border-radius:9rpx;color:var(--accent);background:var(--pale);font-size:22rpx;cursor:grab;user-select:none}.part-remove{z-index:2}
 .method-dialog-head>view .dialog-kicker{margin:0 0 4rpx;color:var(--accent);font-size:13rpx;font-weight:750;letter-spacing:2rpx}.method-dialog-head>view text:nth-child(2){font-size:29rpx;font-weight:900}.method-dialog-head>view text:nth-child(3){margin-top:5rpx;color:#9297a5;font-size:17rpx;font-weight:400}

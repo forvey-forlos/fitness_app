@@ -15,13 +15,13 @@
       <view class="data-grid">
         <view class="section basic-section">
           <view class="section-head">
-            <view class="section-title-wrap"><view class="section-icon">↕</view><view><text class="section-kicker">BODY BASICS</text><text class="section-title">身体基础数据</text></view></view>
+            <view class="section-title-wrap"><view class="section-icon"><UiSymbol kind="person" /></view><view><text class="section-kicker">BODY BASICS</text><text class="section-title">身体基础数据</text></view></view>
             <button class="save-button" :disabled="saving" hover-class="save-pressed" @tap="openSavePaper">{{ saving ? '保存中' : '保存' }}</button>
           </view>
           <text class="section-desc">从列表添加测量项目，拖住右侧手柄即可调整排列</text>
           <view class="metric-list">
             <view v-for="(metric,index) in activeMetrics" :key="metric.key" class="metric-row" :class="{dragging:dragIndex===index}">
-              <view class="metric-symbol" :class="{composition:metric.group==='composition'}">{{ metric.icon }}</view>
+              <view class="metric-symbol" :class="{composition:metric.group==='composition'}"><UiSymbol kind="ring" /></view>
               <view class="metric-copy">
                 <view class="metric-label-line"><text class="metric-name">{{ metric.name }}</text><text v-if="metric.required" class="required-chip">基本项</text><text v-else-if="metric.custom" class="custom-chip">自定义</text></view>
                 <text class="metric-hint">{{ metricHint(metric) }}</text>
@@ -41,7 +41,7 @@
 
         <view class="section history-section">
           <view class="section-head">
-            <view class="section-title-wrap"><view class="section-icon folder-icon">▰</view><view><text class="section-kicker">MEASUREMENT FILES</text><text class="section-title">测量历史</text></view></view>
+            <view class="section-title-wrap"><view class="section-icon folder-icon"><UiSymbol kind="folder" /></view><view><text class="section-kicker">MEASUREMENT FILES</text><text class="section-title">测量历史</text></view></view>
             <text class="section-count">{{ historyCards.length }} 份</text>
           </view>
           <text class="section-desc">每次保存都会生成一张完整测量纸，按时间收入档案夹</text>
@@ -86,6 +86,7 @@ import { onShow } from '@dcloudio/uni-app'
 import { createMeasurement, getBodyProfile, getMeasurements, updateBodyProfile } from '../../api/body'
 import { USER_KEY } from '../../api/auth'
 import { pageSafeStyles } from '../../utils/page-safe-area'
+import UiSymbol from '../../components/UiSymbol.vue'
 
 const THEME_STORAGE_KEY='fit_note_theme_index'
 const DATA_STORAGE_KEY='fit_note_body_profile'
@@ -224,4 +225,5 @@ page{background:#f5f5fa}.page{position:relative;min-height:100vh;overflow:hidden
 @media (max-width:760px){.shell{padding-left:22rpx;padding-right:22rpx}.topbar{grid-template-columns:1fr auto}.brand{display:none}.sync-badge{font-size:17rpx}.hero{margin-top:43rpx}.subtitle{max-width:430rpx}.completion{padding:13rpx 16rpx}.completion-icon{width:48rpx;height:48rpx}.data-grid{grid-template-columns:1fr}.section{padding:23rpx;border-radius:30rpx}.metric-row{gap:10rpx;padding:11rpx 9rpx}.metric-symbol{width:48rpx;height:48rpx}.metric-hint{display:none}.metric-input-wrap{width:135rpx}.drag-handle{width:36rpx}.paper-data{grid-template-columns:1fr}.paper-stage{height:86vh}.review-paper{max-height:75vh;padding:34rpx 30rpx 32rpx}.archive-folder{height:150rpx}.folder-front{inset:32rpx 0 0}.paper-actions{flex-direction:column}.paper-actions button{width:100%}}
 @media (min-width:1000px){.shell{padding-left:60px;padding-right:60px}.hero{margin-top:34px}.section{padding:28px}.metric-row{min-height:68px;padding:9px 13px}.metric-input-wrap{width:135px}.save-button{height:44px;line-height:44px}.history-paper{width:210px;min-height:160px}.paper-overlay{padding:24px}}
 .topbar{display:flex;justify-content:flex-start;gap:17rpx}.nav-back{flex:none;width:62rpx;height:62rpx;margin:0;padding:0;border:0;border-radius:19rpx;color:var(--accent);background:rgba(255,255,255,.78);font-size:42rpx;line-height:56rpx}.nav-back::after{border:0}.nav-title text,.paper-nav>view text{display:block}.nav-title text:first-child,.paper-nav>view text:first-child{color:var(--accent);font-size:15rpx;font-weight:750;letter-spacing:2rpx}.nav-title text:last-child,.paper-nav>view text:last-child{font-size:30rpx;font-weight:760}.sync-badge{margin-left:auto}.paper-overlay{box-sizing:border-box;padding-top:calc(var(--page-safe-top) + 18rpx)}.paper-stage{height:min(870rpx,calc(100vh - var(--page-safe-top) - 55rpx))}.review-paper{max-height:calc(100vh - var(--page-safe-top) - 90rpx)}.paper-nav{display:flex;align-items:center;gap:14rpx;margin-bottom:22rpx}.paper-nav .nav-back{background:var(--pale)}
+.folder-icon{border-radius:19rpx}
 </style>
